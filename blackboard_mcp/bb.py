@@ -85,6 +85,28 @@ def body_links(html: str | None, base_url: str) -> list[dict]:
     return out
 
 
+# Attempt statuses (Blackboard REST) that mean the student handed something in.
+SUBMITTED = {"NeedsGrading", "Completed", "NeedsReconciliation", "Graded"}
+DRAFT = {"InProgress", "Suspended", "InProgressFromReconciliation"}
+
+
+def submission_status(grade: dict | None, attempts: list[dict], due: datetime | None, now: datetime) -> str:
+    """One word for where an evaluation stands for the student:
+    graded / submitted / draft / overdue (due date passed, nothing handed in) / pending."""
+    statuses = {a.get("status") for a in attempts}
+    graded = (grade or {}).get("status") == "Graded" or (
+        (grade or {}).get("score") is not None and (grade or {}).get("status") != "NeedsGrading")
+    if graded:
+        return "graded"
+    if statuses & SUBMITTED or (grade or {}).get("status") == "NeedsGrading":
+        return "submitted"
+    if statuses & DRAFT:
+        return "draft"
+    if due and due < now:
+        return "overdue"
+    return "pending"
+
+
 @dataclass
 class Course:
     id: str                 # internal primary key, e.g. _12345_1
@@ -272,6 +294,75 @@ class Blackboard:
                 break
             start = end
         return items
+
+    # -- evaluations (assignments, tests) and the student's own submissions --
+    def my_attempts(self, course_pk: str, column_id: str) -> list[dict]:
+        """The signed-in student's own attempts on one gradebook column (empty if none or not visible)."""
+        try:
+            return list(self.paged(f"{API}/v2/courses/{course_pk}/gradebook/columns/{column_id}/attempts",
+                                   userId=self.me()["id"]))
+        except (PermissionError, httpx.HTTPStatusError):
+            return []
+
+    def my_grade(self, course_pk: str, column_id: str) -> dict | None:
+        """The signed-in student's grade record on one column (status, score, feedback), if visible."""
+        try:
+            return self.get(f"{API}/v2/courses/{course_pk}/gradebook/columns/{column_id}/users/{self.me()['id']}")
+        except (PermissionError, httpx.HTTPStatusError):
+            return None
+
+    def content_item(self, course_pk: str, content_id: str) -> dict | None:
+        try:
+            return self.get(f"{API}/v1/courses/{course_pk}/contents/{content_id}")
+        except (PermissionError, httpx.HTTPStatusError):
+            return None
+
+    def evaluations(self, course: "Course", now: datetime | None = None) -> list[dict]:
+        """Every gradable evaluation in a course with its due date, the student's submission status and the files
+        the teacher attached (rubrics, instructions, templates)."""
+        from concurrent.futures import ThreadPoolExecutor
+
+        now = now or datetime.now().astimezone()
+        cols = [c for c in self.gradebook_columns(course.id)
+                if (c.get("grading") or {}).get("type") != "Calculated"           # totals / weighted columns
+                and (c.get("availability") or {}).get("available") != "No"]
+
+        def one(col: dict) -> dict:
+            grading = col.get("grading") or {}
+            attempts = self.my_attempts(course.id, col["id"])
+            grade = self.my_grade(course.id, col["id"])
+            item = self.content_item(course.id, col["contentId"]) if col.get("contentId") else None
+            files = []
+            if item:
+                files = [a.get("fileName") for a in self.attachments(course.id, item["id"])]
+                files += [ln["text"] for ln in body_links(item.get("body"), self.s.base_url)
+                          if ln["blackboard_file"] and not ln.get("inline_image")]
+            due = grading.get("due")
+            status = submission_status(grade, attempts, parse_dt(due), now)
+            score = (grade or {}).get("displayGrade") or {}
+            return {
+                "title": col.get("name") or (item or {}).get("title"),
+                # "submission": something to hand in on Blackboard; "grade_only": a mark the teacher enters
+                # (exam taken in class, participation…), so pending/overdue there doesn't mean anything is missing.
+                "kind": "submission" if col.get("contentId") or grading.get("type") == "Attempts" else "grade_only",
+                "due": due,
+                "status": status,
+                "attempts_submitted": sum(1 for a in attempts if a.get("status") in SUBMITTED),
+                "attempts_allowed": grading.get("attemptsAllowed"),
+                "score": score.get("text") or score.get("score") or (grade or {}).get("score"),
+                "points_possible": (col.get("score") or {}).get("possible"),
+                "feedback": html_to_text((grade or {}).get("feedback"))[:800] or None,
+                "instructions": html_to_text((item or {}).get("body") or col.get("description"))[:1500] or None,
+                "teacher_files": [f for f in files if f],
+                "content_id": (item or {}).get("id"),   # pass to bb_download to get the files
+                "column_id": col["id"],
+                "open_in_blackboard": self.web_link(course, item) if item else course.url,
+            }
+
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            out = list(pool.map(one, cols))
+        out.sort(key=lambda e: (e["due"] is None, e["due"] or ""))
+        return out
 
     def announcements(self, course_pk: str) -> list[dict]:
         try:

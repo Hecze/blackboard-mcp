@@ -104,6 +104,52 @@ def test_stdio_lists_tools_and_keeps_stdout_clean():
         rpc(1, "initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t", "version": "0"}})
         p.stdin.write(json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}) + "\n")
         names = {t["name"] for t in rpc(2, "tools/list")["result"]["tools"]}
-        assert {"bb_login", "bb_sync", "bb_sync_status", "bb_upcoming", "bb_announcements", "bb_set_courses"} <= names
+        assert {"bb_login", "bb_sync", "bb_sync_status", "bb_upcoming", "bb_announcements", "bb_set_courses",
+                "bb_evaluations"} <= names
     finally:
         p.kill()
+
+
+def test_submission_status():
+    from blackboard_mcp.bb import submission_status
+    past, future = datetime(2026, 10, 1, tzinfo=timezone.utc), datetime(2026, 11, 1, tzinfo=timezone.utc)
+    assert submission_status(None, [], future, NOW) == "pending"
+    assert submission_status(None, [], past, NOW) == "overdue"
+    assert submission_status(None, [{"status": "InProgress"}], past, NOW) == "draft"
+    assert submission_status(None, [{"status": "NeedsGrading"}], past, NOW) == "submitted"
+    assert submission_status({"status": "NeedsGrading"}, [], past, NOW) == "submitted"
+    assert submission_status({"status": "Graded", "score": 17}, [{"status": "Completed"}], past, NOW) == "graded"
+
+
+def test_evaluations_from_api():
+    import httpx
+    from blackboard_mcp.bb import Blackboard
+
+    api = "/learn/api/public"
+    routes = {
+        f"{api}/v1/users/me": {"id": "_u1", "userName": "alumno"},
+        f"{api}/v2/courses/_c1/gradebook/columns": {"results": [
+            {"id": "_g1", "name": "T1 - Informe", "contentId": "_x1", "grading": {"type": "Attempts", "due": "2026-10-10T04:59:00Z", "attemptsAllowed": 1}, "score": {"possible": 20}},
+            {"id": "_g2", "name": "EF - Examen final", "grading": {"type": "Manual", "due": "2026-12-01T04:59:00Z"}},
+            {"id": "_g3", "name": "Total", "grading": {"type": "Calculated"}},
+        ]},
+        f"{api}/v2/courses/_c1/gradebook/columns/_g1/attempts": {"results": [{"id": "_a1", "status": "NeedsGrading"}]},
+        f"{api}/v2/courses/_c1/gradebook/columns/_g2/attempts": {"results": []},
+        f"{api}/v2/courses/_c1/gradebook/columns/_g1/users/_u1": {"status": "NeedsGrading"},
+        f"{api}/v1/courses/_c1/contents/_x1": {"id": "_x1", "title": "T1 - Informe",
+                                               "body": "<p>Entregar en PDF.</p>"},
+        f"{api}/v1/courses/_c1/contents/_x1/attachments": {"results": [{"id": "_f1", "fileName": "Rubrica T1.pdf"}]},
+    }
+
+    def handler(req):
+        body = routes.get(req.url.path)
+        return httpx.Response(200, json=body) if body is not None else httpx.Response(404, json={})
+
+    bb = Blackboard(load_settings(), transport=httpx.MockTransport(handler), refresher=lambda s: True)
+    bb._client.cookies.set("BbRouter", "x")
+    evs = bb.evaluations(Course(id="_c1", course_id="C1", name="Curso", code=None, url="u"), now=NOW)
+    assert [e["title"] for e in evs] == ["T1 - Informe", "EF - Examen final"]  # the calculated total is left out
+    t1, ef = evs
+    assert t1["status"] == "submitted" and t1["kind"] == "submission" and t1["teacher_files"] == ["Rubrica T1.pdf"]
+    assert t1["instructions"] == "Entregar en PDF." and t1["content_id"] == "_x1"
+    assert ef["status"] == "pending" and ef["kind"] == "grade_only"

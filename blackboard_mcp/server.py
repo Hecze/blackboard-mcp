@@ -17,7 +17,8 @@ mcp = FastMCP(
     "blackboard",
     instructions=(
         "Tools for the student's Blackboard (Ultra). bb_courses lists current courses; bb_browse shows a course's "
-        "content; bb_upcoming lists due dates; bb_announcements shows recent announcements; bb_download saves one "
+        "content; bb_upcoming lists due dates; bb_evaluations lists every evaluation with the student's submission status and "
+        "the teacher's attached files (rubrics); bb_announcements shows recent announcements; bb_download saves one "
         "item's files; bb_sync downloads every current course's PDFs, skipping sites that aren't courses and posters, "
         "handbooks and forms (check bb_sync_status; bb_set_courses changes which courses it pulls). If any tool reports "
         "that sign-in is needed, call bb_login, which opens a browser window for the university sign-in."
@@ -165,6 +166,29 @@ async def bb_upcoming(days: int = 21) -> dict:
                  for it in bb.calendar_due(now - timedelta(days=1), now + timedelta(days=days))]
         items.sort(key=lambda i: i["due"] or "")
         return {"window_days": days, "items": items}
+    return await _run(go)
+
+
+@mcp.tool()
+async def bb_evaluations(course: str | None = None, only_open: bool = False) -> dict:
+    """Every evaluation (assignments, tests, exams) in one course, or in all current courses if none is given:
+    due date, the student's own status (pending / draft / submitted / graded / overdue), score and feedback,
+    the instructions and the files the teacher attached to it (rubrics, templates). Call bb_download with the
+    course and `content_id` to download those files. only_open=True keeps just what still needs handing in."""
+    def go():
+        bb = _bb()
+        cs = [bb.find_course(course)] if course else Syncer(_settings, bb).courses()
+        out = []
+        for c in cs:
+            for e in bb.evaluations(c):
+                if only_open and (e["kind"] != "submission" or e["status"] not in ("pending", "draft", "overdue")):
+                    continue
+                out.append({"course": c.short_name(), **e})
+        out.sort(key=lambda e: (e["due"] is None, e["due"] or ""))
+        counts: dict[str, int] = {}
+        for e in out:
+            counts[e["status"]] = counts.get(e["status"], 0) + 1
+        return {"counts": counts, "evaluations": out}
     return await _run(go)
 
 

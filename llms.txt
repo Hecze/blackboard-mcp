@@ -6,7 +6,7 @@
 - [README](https://github.com/Mattlo0546/blackboard-mcp/blob/main/README.md): install, client configs, tools, universities, FAQ
 
 ## Tools
-- bb_login, bb_status, bb_courses, bb_browse, bb_download, bb_upcoming, bb_announcements, bb_sync / bb_sync_status
+- bb_login, bb_status, bb_courses, bb_browse, bb_download, bb_upcoming, bb_evaluations, bb_announcements, bb_sync / bb_sync_status
 
 ## Install
 - `uv tool install --managed-python https://github.com/Mattlo0546/blackboard-mcp/archive/refs/heads/main.zip`, then `BB_BASE_URL=<your blackboard> blackboard-mcp login`; run with `blackboard-mcp serve` (stdio)
