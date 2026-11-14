@@ -53,6 +53,27 @@ def save_cookies(settings: Settings, cookies: list[dict]) -> None:
     p.chmod(0o600)
 
 
+def health_path(settings: Settings) -> Path:
+    return settings.home / "session-health.json"
+
+
+def write_health(settings: Settings, ok: bool, message: str = "") -> None:
+    """Record whether the last sign-in / silent refresh worked, so the MCP server and the scheduled
+    keep-alive can tell the student straight away when the session is lost."""
+    try:
+        health_path(settings).write_text(json.dumps(
+            {"ok": ok, "checked_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "message": message}, indent=1))
+    except OSError:
+        pass
+
+
+def read_health(settings: Settings) -> dict | None:
+    try:
+        return json.loads(health_path(settings).read_text())
+    except (OSError, ValueError):
+        return None
+
+
 def _host(settings: Settings) -> str:
     from urllib.parse import urlparse
     return urlparse(settings.base_url).hostname or ""
@@ -73,6 +94,13 @@ def _launch(pw, settings: Settings, headless: bool):
 
 
 def browser_login(settings: Settings, *, headless: bool = False, timeout_s: int = 300) -> dict:
+    res = _browser_login(settings, headless=headless, timeout_s=timeout_s)
+    write_health(settings, bool(res.get("ok")),
+                 "" if res.get("ok") else ("silent refresh failed: " if headless else "") + str(res.get("reason")))
+    return res
+
+
+def _browser_login(settings: Settings, *, headless: bool = False, timeout_s: int = 300) -> dict:
     """Open Blackboard in a browser and wait until we land in Ultra, signed in.
 
     headless=True is the silent refresh: it only succeeds if the SSO session in
@@ -101,11 +129,21 @@ def browser_login(settings: Settings, *, headless: bool = False, timeout_s: int 
                 if not clicked_sso and host in url and "/ultra" not in url:
                     # On the landing page: start SSO. With a valid "stay signed in" cookie in the
                     # profile, Microsoft signs us straight back in without MFA.
+                    # Many sites (e.g. Cibertec) hide the SAML button behind "Ver opciones", so a click would
+                    # wait for a visible element and stall: follow the SAML login link directly when there is one.
+                    try:
+                        saml = page.eval_on_selector("a[href*='/auth-saml/saml/login']", "a => a.href")
+                    except Exception:
+                        saml = None
+                    if saml:
+                        page.goto(saml, wait_until="domcontentloaded")
+                        clicked_sso = True
+                        continue
                     for text in ((settings.sso_button,) if settings.sso_button else ()) + SSO_BUTTONS:
                         try:
                             btn = page.get_by_text(text, exact=False)
                             if btn.count():
-                                btn.first.click()
+                                btn.first.click(timeout=3000)
                                 clicked_sso = True
                                 break
                         except Exception:
@@ -132,5 +170,6 @@ def browser_login(settings: Settings, *, headless: bool = False, timeout_s: int 
 def refresh_silently(settings: Settings) -> bool:
     try:
         return bool(browser_login(settings, headless=True).get("ok"))
-    except Exception:
+    except Exception as e:  # noqa: BLE001
+        write_health(settings, False, f"silent refresh crashed: {type(e).__name__}: {e}")
         return False

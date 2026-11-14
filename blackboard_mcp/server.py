@@ -8,24 +8,32 @@ from datetime import datetime, timedelta, timezone
 import anyio
 from mcp.server.fastmcp import FastMCP
 
-from .auth import LoginRequired, browser_login
+from .auth import LoginRequired, browser_login, read_health, write_health
 from .bb import Blackboard, body_links, handler_id, html_to_text, parse_dt
 from .config import load_settings
 from .sync import Syncer, safe
 
+_settings = load_settings()
+_health = read_health(_settings)
+_ALERT = (
+    "CRITICAL: the student's Blackboard session is LOST (last check "
+    f"{(_health or {}).get('checked_at')}: {(_health or {}).get('message')}). Tell the student IMMEDIATELY, before "
+    "anything else, and ask them to sign in again with bb_login. "
+) if _health and not _health.get("ok") else ""
+
 mcp = FastMCP(
     "blackboard",
-    instructions=(
+    instructions=_ALERT + (
         "Tools for the student's Blackboard (Ultra). bb_courses lists current courses; bb_browse shows a course's "
         "content; bb_upcoming lists due dates; bb_evaluations lists every evaluation with the student's submission status and "
         "the teacher's attached files (rubrics); bb_announcements shows recent announcements; bb_download saves one "
         "item's files; bb_sync downloads every current course's PDFs, skipping sites that aren't courses and posters, "
         "handbooks and forms (check bb_sync_status; bb_set_courses changes which courses it pulls). If any tool reports "
         "that sign-in is needed, call bb_login, which opens a browser window for the university sign-in."
+        " If any tool returns login_required, that is CRITICAL: tell the student at once, prominently."
     ),
 )
 
-_settings = load_settings()
 _job: dict = {"running": False}
 _job_lock = threading.Lock()
 
@@ -41,7 +49,9 @@ async def _run(fn, *args):
     try:
         return await anyio.to_thread.run_sync(lambda: fn(*args))
     except LoginRequired as e:
-        return {"login_required": True, "message": str(e)}
+        write_health(_settings, False, str(e))
+        return {"login_required": True, "critical": True,
+                "message": "CRITICAL - Blackboard session lost, tell the student immediately. " + str(e)}
     except (ValueError, PermissionError) as e:
         return {"error": str(e)}
 
@@ -66,7 +76,8 @@ async def bb_status() -> dict:
         me = _bb().me()
         return {"base_url": _settings.base_url, "signed_in_as": me.get("userName"),
                 "name": (me.get("name") or {}).get("given"), "download_dir": str(_settings.download_dir),
-                "last_sync": datetime.fromtimestamp(last).isoformat(timespec="minutes") if last else None}
+                "last_sync": datetime.fromtimestamp(last).isoformat(timespec="minutes") if last else None,
+                "session_health": read_health(_settings)}
     return await _run(go)
 
 
@@ -139,17 +150,12 @@ async def bb_download(course: str, content_id: str) -> dict:
         bb = _bb()
         c = bb.find_course(course)
         folder = _settings.download_dir / safe(c.short_name(), 60) / "Downloads"
-        paths = []
-        for att in bb.attachments(c.id, content_id):
-            dest = folder / safe(att.get("fileName") or att["id"], 120)
-            bb.download(bb.attachment_url(c.id, content_id, att["id"]), dest)
-            paths.append(str(dest))
         item = bb.get(f"/learn/api/public/v1/courses/{c.id}/contents/{content_id}")
-        for ln in body_links(item.get("body"), _settings.base_url):
-            if ln["blackboard_file"] and not ln.get("inline_image"):
-                dest = folder / safe(ln["text"], 120)
-                bb.download(ln["url"], dest)
-                paths.append(str(dest))
+        paths = []
+        for f in bb.item_files(c.id, item):   # attachments, embedded files, Ultra assessment instructions
+            dest = folder / safe(f["name"], 120)
+            bb.download(f["url"], dest)
+            paths.append(str(dest))
         return {"title": item.get("title"), "files": paths}
     return await _run(go)
 

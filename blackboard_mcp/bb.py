@@ -317,6 +317,34 @@ class Blackboard:
         except (PermissionError, httpx.HTTPStatusError):
             return None
 
+    def assessment_html(self, course_pk: str, item: dict) -> str:
+        """Instructions + description HTML of an Ultra assessment (test or assignment). Ultra keeps the teacher's
+        files for an evaluation (rubric, statement, templates) embedded here, not as content attachments; only
+        the Ultra UI's own API (/learn/api/v1) exposes it."""
+        aid = (item.get("contentHandler") or {}).get("assessmentId")
+        if not aid:
+            return ""
+        try:
+            a = self.get(f"/learn/api/v1/courses/{course_pk}/assessments/{aid}")
+        except (PermissionError, httpx.HTTPStatusError, ValueError):
+            return ""
+        return "\n".join((a.get(k) or {}).get("rawText") or "" for k in ("instructions", "description"))
+
+    def item_files(self, course_pk: str, item: dict) -> list[dict]:
+        """Files the teacher attached to a content item: {"name", "url"} (attachments, embedded files and, for
+        Ultra assessments, the files inside the instructions)."""
+        files = [{"name": a.get("fileName") or a["id"], "url": self.attachment_url(course_pk, item["id"], a["id"])}
+                 for a in self.attachments(course_pk, item["id"])]
+        for html in (item.get("body"), self.assessment_html(course_pk, item)):
+            files += [{"name": ln["text"], "url": ln["url"]} for ln in body_links(html, self.s.base_url)
+                      if ln["blackboard_file"] and not ln.get("inline_image")]
+        seen, out = set(), []
+        for f in files:
+            if f["url"] not in seen:
+                seen.add(f["url"])
+                out.append(f)
+        return out
+
     def evaluations(self, course: "Course", now: datetime | None = None) -> list[dict]:
         """Every gradable evaluation in a course with its due date, the student's submission status and the files
         the teacher attached (rubrics, instructions, templates)."""
@@ -332,11 +360,8 @@ class Blackboard:
             attempts = self.my_attempts(course.id, col["id"])
             grade = self.my_grade(course.id, col["id"])
             item = self.content_item(course.id, col["contentId"]) if col.get("contentId") else None
-            files = []
-            if item:
-                files = [a.get("fileName") for a in self.attachments(course.id, item["id"])]
-                files += [ln["text"] for ln in body_links(item.get("body"), self.s.base_url)
-                          if ln["blackboard_file"] and not ln.get("inline_image")]
+            files = [f["name"] for f in self.item_files(course.id, item)] if item else []
+            instructions_html = (item or {}).get("body") or self.assessment_html(course.id, item) if item else ""
             due = grading.get("due")
             status = submission_status(grade, attempts, parse_dt(due), now)
             score = (grade or {}).get("displayGrade") or {}
@@ -344,15 +369,16 @@ class Blackboard:
                 "title": col.get("name") or (item or {}).get("title"),
                 # "submission": something to hand in on Blackboard; "grade_only": a mark the teacher enters
                 # (exam taken in class, participation…), so pending/overdue there doesn't mean anything is missing.
-                "kind": "submission" if col.get("contentId") or grading.get("type") == "Attempts" else "grade_only",
+                "kind": "submission" if item else "grade_only",
                 "due": due,
                 "status": status,
                 "attempts_submitted": sum(1 for a in attempts if a.get("status") in SUBMITTED),
                 "attempts_allowed": grading.get("attemptsAllowed"),
-                "score": score.get("text") or score.get("score") or (grade or {}).get("score"),
+                "score": next((v for v in (score.get("text"), score.get("score"), (grade or {}).get("score"))
+                               if v is not None), None),
                 "points_possible": (col.get("score") or {}).get("possible"),
                 "feedback": html_to_text((grade or {}).get("feedback"))[:800] or None,
-                "instructions": html_to_text((item or {}).get("body") or col.get("description"))[:1500] or None,
+                "instructions": html_to_text(instructions_html or col.get("description"))[:1500] or None,
                 "teacher_files": [f for f in files if f],
                 "content_id": (item or {}).get("id"),   # pass to bb_download to get the files
                 "column_id": col["id"],

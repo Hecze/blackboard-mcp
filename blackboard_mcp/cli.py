@@ -12,6 +12,7 @@ def main() -> None:
     sp = sub.add_parser("login", help="sign in (opens Chrome)")
     sp.add_argument("--timeout", type=int, default=300)
     sub.add_parser("status", help="who you're signed in as")
+    sub.add_parser("refresh", help="silently renew the session (for a scheduled keep-alive); exit 2 if sign-in is needed")
     sub.add_parser("courses", help="your current courses")
     sp = sub.add_parser("sync", help="download PDFs from every current course (or the ones named)")
     sp.add_argument("courses", nargs="*")
@@ -24,7 +25,13 @@ def main() -> None:
 
     import anyio
     from . import server
-    if args.cmd == "login":
+    if args.cmd == "refresh":
+        from .auth import browser_login
+        from .config import load_settings
+        rep = browser_login(load_settings(), headless=True)
+        if not rep.get("ok"):
+            rep["login_required"] = True
+    elif args.cmd == "login":
         rep = anyio.run(lambda: server.bb_login(args.timeout))
     elif args.cmd == "status":
         rep = anyio.run(server.bb_status)
