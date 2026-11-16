@@ -45,6 +45,12 @@ When starting work in this repo, glance at `session-health.json` first and apply
   `pip install --only-binary=:all: cryptography`).
 - Tests: `.venv\Scripts\python -m pytest -q` (offline, no account needed).
 - Keep files LF line endings. Work on a branch; `main` tracks upstream (`git remote upstream`).
+- Recorded classes: Cibertec runs live lessons in **Class** (cibertec.class.com, Zoom underneath), not
+  Collaborate. `bb_recordings` lists them, `bb_transcript` saves Markdown transcripts under
+  `<download_dir>/Grabaciones/<class>/` using Zoom's `audio_transcript.vtt` (good Spanish, speaker names;
+  Class's own live captions are much worse and are only a fallback). `classcom.py` gets the Class
+  `user_uuid` from the Class web app's localStorage after Microsoft SSO and keeps it in `~/.blackboard-mcp/class.json`.
+- Teachers also post class scripts and diagrams in **announcements** — check them, not only course content.
 - Main tools: `bb_evaluations` (each evaluation's due date, the student's status, score, feedback,
   instructions and the teacher's attached files such as rubrics), `bb_upcoming`, `bb_browse`,
   `bb_download`, `bb_announcements`, `bb_sync`.

@@ -54,6 +54,8 @@ claude mcp add blackboard -e BB_BASE_URL=https://www.ole.bris.ac.uk -- ~/.local/
 | `bb_download` | Every file in one content item |
 | `bb_upcoming` | Due dates in the next N days (default 21) |
 | `bb_evaluations` | Every evaluation in a course (or all): due date, your status (pending / draft / submitted / graded / overdue), score, feedback, instructions and the teacher's attached files (rubrics) |
+| `bb_recordings` | Recorded live lessons from Class (class.com, the Zoom/Teams classroom behind "Launch Class"): TEO/LAB rooms of a course, date, duration, status |
+| `bb_transcript` | Saves recordings as Markdown transcripts: 🎓 teacher vs 🙋 each student by name (Zoom speaker labels), timestamps and the class chat interleaved. Needs `class_web` in config |
 | `bb_announcements` | Recent announcements, for one course or all of this year's |
 | `bb_sync` / `bb_sync_status` | Download the PDFs from this year's courses (or the ones named), in the background |
 | `bb_set_courses` | Change which courses a full sync pulls (`include` an info site it skips, `exclude` a course) |

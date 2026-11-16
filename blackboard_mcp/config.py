@@ -24,6 +24,9 @@ class Settings:
     # Text of the button that starts single sign-on on your Blackboard's landing page, if it has one
     # (only needed for the silent refresh; a few common ones are tried anyway).
     sso_button: str = ""
+    # Class (class.com) site the school runs live lessons and their recordings through, e.g.
+    # https://cibertec.class.com ("Launch Class" in a Blackboard course). Empty = not used.
+    class_web: str = ""
     home: Path = HOME_DIR
 
     @property
@@ -76,6 +79,8 @@ def load_settings() -> Settings:
         s.download_dir = Path(env["BB_DOWNLOAD_DIR"]).expanduser()
     if env.get("BB_BROWSER_CHANNEL") is not None:
         s.browser_channel = env["BB_BROWSER_CHANNEL"]
+    if env.get("BB_CLASS_WEB"):
+        s.class_web = env["BB_CLASS_WEB"]
     if env.get("BB_SSO_BUTTON"):
         s.sso_button = env["BB_SSO_BUTTON"]
     s.base_url = normalise_url(s.base_url)

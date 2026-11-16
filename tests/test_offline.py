@@ -105,7 +105,7 @@ def test_stdio_lists_tools_and_keeps_stdout_clean():
         p.stdin.write(json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}) + "\n")
         names = {t["name"] for t in rpc(2, "tools/list")["result"]["tools"]}
         assert {"bb_login", "bb_sync", "bb_sync_status", "bb_upcoming", "bb_announcements", "bb_set_courses",
-                "bb_evaluations"} <= names
+                "bb_evaluations", "bb_recordings", "bb_transcript"} <= names
     finally:
         p.kill()
 
@@ -153,3 +153,31 @@ def test_evaluations_from_api():
     assert t1["status"] == "submitted" and t1["kind"] == "submission" and t1["teacher_files"] == ["Rubrica T1.pdf"]
     assert t1["instructions"] == "Entregar en PDF." and t1["content_id"] == "_x1"
     assert ef["status"] == "pending" and ef["kind"] == "grade_only"
+
+
+def test_class_transcript_vtt_and_markdown():
+    from blackboard_mcp.classcom import parse_vtt, to_markdown
+    vtt = ("WEBVTT\n\n1\n00:12:55.250 --> 00:13:03.780\nJAIME FACTOR LOPEZ LOPEZ: Buenas tardes.\n\n"
+           "2\n00:13:04.000 --> 00:13:06.000\nJAIME FACTOR LOPEZ LOPEZ: Empezamos.\n\n"
+           "3\n00:13:07.000 --> 00:13:08.000\nAudio shared by JAIME FACTOR LOPEZ LOPEZ: y a y a\n\n"
+           "4\n00:13:10.000 --> 00:13:12.000\nHEBERT ROBERTO SALVADOR CORDERO: Profesor, una consulta.\n")
+    lines = parse_vtt(vtt)
+    assert [l["speaker"] for l in lines] == ["JAIME FACTOR LOPEZ LOPEZ"] * 2 + ["HEBERT ROBERTO SALVADOR CORDERO"]
+    assert lines[0]["t"] == 12 * 60 + 55.25
+    md = to_markdown({"class_name": "BD TEO", "start": datetime(2026, 11, 9, 19, 19, tzinfo=timezone.utc),
+                      "duration_s": 100, "teacher": "JAIME FACTOR LOPEZ LOPEZ", "source": "zoom", "participants": 3,
+                      "lines": lines, "chats": [{"t": 789.0, "speaker": "OLVER", "text": "Hola", "chat": True}]})
+    assert "**[00:12:55] 🎓 PROFESOR (Jaime Factor Lopez Lopez):** Buenas tardes. Empezamos." in md
+    assert "🙋 Alumno: Hebert Roberto Salvador Cordero" in md and "y a y a" not in md
+    assert "💬 [00:13:09] **Olver** (chat): Hola" in md
+    assert "09/11/2026 14:19" in md   # Lima time
+
+
+def test_class_matches_blackboard_course():
+    from blackboard_mcp.classcom import ClassClient
+    cc = ClassClient.__new__(ClassClient)
+    cc.classes = lambda: [{"class_uuid": "a", "class_name": "Base de Datos_Lopez Lopez, Jaime TEO"},
+                          {"class_uuid": "b", "class_name": "Base de Datos_Lopez Lopez, Jaime LAB"},
+                          {"class_uuid": "c", "class_name": "ANALISIS Y DISEÑO DE SOFTWARE _ Julianne (LA)"}]
+    assert [c["class_uuid"] for c in cc.classes_for("GDAT5373 BASE DE DATOS")] == ["a", "b"]
+    assert [c["class_uuid"] for c in cc.classes_for("DCGS5365 ANALISIS Y DISEÑO DE SOFTWARE")] == ["c"]

@@ -218,6 +218,92 @@ async def bb_announcements(course: str | None = None, days: int = 14) -> dict:
     return await _run(go)
 
 
+def _class_client():
+    from .classcom import ClassClient
+    if not _settings.class_web:
+        raise ValueError("Class isn't set up: add \"class_web\" (e.g. https://yourschool.class.com) to "
+                         "~/.blackboard-mcp/config.json.")
+    return ClassClient(_settings)
+
+
+def _class_targets(cc, course: str | None) -> list[dict]:
+    if not course:
+        return cc.classes()
+    try:
+        name = _bb().find_course(course).name
+    except (ValueError, PermissionError, LoginRequired):
+        name = course
+    hits = cc.classes_for(name)
+    if not hits:
+        raise ValueError(f"No Class classroom matches '{course}'. Classes: "
+                         + "; ".join(c["class_name"] for c in cc.classes()))
+    return hits
+
+
+@mcp.tool()
+async def bb_recordings(course: str | None = None) -> dict:
+    """Recorded live lessons (Class / Zoom) for one course — its TEO and LAB rooms — or for every class.
+    Each recording has a date, duration and status; pass class_uuid + recording_id to bb_transcript."""
+    from .classcom import ClassLoginRequired
+
+    def go():
+        cc = _class_client()
+        out = []
+        for c in _class_targets(cc, course):
+            for r in cc.recordings(c["class_uuid"]):
+                out.append({"class_name": c["class_name"], "teacher": c.get("teacher"), "class_uuid": c["class_uuid"],
+                            "recording_id": r["recordingId"], "when": r.get("when"), "status": r.get("status"),
+                            "duration": time.strftime("%H:%M:%S", time.gmtime(r.get("duration") or 0)),
+                            "transcript_saved": _transcript_path(c["class_name"], r).exists()})
+        out.sort(key=lambda r: r["when"] or "", reverse=True)
+        return {"recordings": out}
+    try:
+        return await _run(go)
+    except ClassLoginRequired as e:
+        return {"login_required": True, "critical": True, "message": str(e)}
+
+
+def _transcript_path(class_name: str, rec: dict):
+    when = (rec.get("when") or "")[:10]
+    return _settings.download_dir / "Grabaciones" / safe(class_name or "Class", 80) / f"{when} {rec.get('recordingId', rec.get('recording_id', ''))[:8]}.md"
+
+
+@mcp.tool()
+async def bb_transcript(course: str | None = None, class_uuid: str | None = None, recording_id: str | None = None,
+                        refresh: bool = False) -> dict:
+    """Save readable transcripts of recorded lessons as Markdown: who speaks (🎓 PROFESOR vs 🙋 Alumno by name,
+    from Zoom's speaker labels), when, and the class chat in between. Give class_uuid + recording_id for one
+    recording, or `course` to fetch every finished recording of that course not saved yet. Returns the file
+    paths — read them to study what was taught."""
+    from .classcom import ClassLoginRequired, to_markdown
+
+    def go():
+        cc = _class_client()
+        if class_uuid and recording_id:
+            targets = [(c, {"recordingId": recording_id}) for c in cc.classes() if c["class_uuid"] == class_uuid] \
+                or [({"class_uuid": class_uuid, "class_name": "", "teacher": ""}, {"recordingId": recording_id})]
+        else:
+            targets = [(c, r) for c in _class_targets(cc, course) for r in cc.recordings(c["class_uuid"])
+                       if r.get("status") == "AVAILABLE"]
+        saved, skipped = [], []
+        for c, r in targets:
+            path = _transcript_path(c["class_name"], r)
+            if path.exists() and not refresh and r.get("when"):
+                skipped.append(str(path))
+                continue
+            tr = cc.transcript(c["class_uuid"], r["recordingId"], c.get("class_name", ""), c.get("teacher") or "")
+            path = _transcript_path(tr["class_name"], {"when": tr["start"].isoformat(), "recordingId": r["recordingId"]})
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(to_markdown(tr), encoding="utf-8")
+            saved.append({"file": str(path), "teacher": tr["teacher"], "source": tr["source"],
+                          "lines": len(tr["lines"]), "chat_messages": len(tr["chats"])})
+        return {"saved": saved, "already_saved": skipped}
+    try:
+        return await _run(go)
+    except ClassLoginRequired as e:
+        return {"login_required": True, "critical": True, "message": str(e)}
+
+
 def _sync_worker(courses):
     try:
         _job["report"] = Syncer(_settings, _bb(), lambda m: _job.update(progress=m)).run(courses or None)
