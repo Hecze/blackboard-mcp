@@ -200,5 +200,5 @@ def test_skills_mirrors_in_sync_and_frontmatter_valid():
 def test_docs_have_no_control_characters():
     files = [REPO / "AGENTS.md", REPO / "README.md", *(REPO / "skills").rglob("*.md"), *(REPO / "scripts").rglob("*.ps1")]
     for f in files:
-        bad = [c for c in f.read_text(encoding="utf-8-sig") if ord(c) < 32 and c not in "\n\r\t"]
+        bad = [c for c in f.read_text(encoding="utf-8-sig") if ord(c) < 32 and c not in "\n\r"]  # tabs too: one was a mangled "\t"
         assert not bad, f"{f.name} has control characters (a mangled backslash?)"
