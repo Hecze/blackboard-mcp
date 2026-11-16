@@ -38,6 +38,13 @@ recorded class (`bb_recordings`/`bb_transcript`, one subagent per class), checks
 writes a sourced dossier in `estudio/<CODE>-<evaluation>/EXPEDIENTE.md`. Then do whatever the user asked with it,
 respecting the teacher's rules recorded there (e.g. AI forbidden in that evaluation).
 
+## Desktop apps and documents (SQL Server/SSMS, yEd, Word…)
+
+Before driving desktop programs or editing .docx, set the machine up with the project skill
+**`preparar-entorno-escritorio`** ([.claude/skills/preparar-entorno-escritorio/SKILL.md](.claude/skills/preparar-entorno-escritorio/SKILL.md)):
+existing MCPs (Windows-MCP via UI Automation, a Word MCP), winget installs the student approves, headless diagram/PDF
+rendering. Never hand-roll SendKeys/coordinate clicks or a persistent admin broker. Target: Windows x86_64 (ARM64 later).
+
 ## How the session stays alive
 
 - Sign-in uses a dedicated Chrome profile at `~/.blackboard-mcp/browser-profile` (Microsoft "stay signed in").
