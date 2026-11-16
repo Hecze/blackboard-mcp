@@ -31,8 +31,8 @@ When starting work in this repo, glance at `session-health.json` first and apply
 
 ## Working on an evaluation (T1, T2, final exam, project…)
 
-Gather its full context with the project skill **`contexto-evaluacion`**
-([.claude/skills/contexto-evaluacion/SKILL.md](.claude/skills/contexto-evaluacion/SKILL.md)): it finds the evaluation,
+Gather its full context with the project skill **`obtener-contexto-evaluacion`**
+([.claude/skills/obtener-contexto-evaluacion/SKILL.md](.claude/skills/obtener-contexto-evaluacion/SKILL.md)): it finds the evaluation,
 its files and settings, pulls the whole course (`bb_pull_course`), reads the syllabus, transcribes and analyses every
 recorded class (`bb_recordings`/`bb_transcript`, one subagent per class), checks announcements, settles the scope and
 writes a sourced dossier in `estudio/<CODE>-<evaluation>/EXPEDIENTE.md`. Then do whatever the user asked with it,

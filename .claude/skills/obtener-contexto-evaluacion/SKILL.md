@@ -1,9 +1,9 @@
 ---
-name: contexto-evaluacion
+name: obtener-contexto-evaluacion
 description: Reúne TODO lo que existe sobre una evaluación de un curso de Cibertec en Blackboard (T1, T2, examen final, entregable, proyecto…) — fecha real, reglas, intentos, rúbrica, enunciado, sílabo, material del curso, anuncios y lo que el profesor dijo en cada clase grabada — y lo deja en un expediente con fuentes citadas. Úsala cuando haya que trabajar sobre una evaluación concreta, sea cual sea el fin (estudiar, practicar, entender una nota, revisar lo aprendido). Argumentos: evaluación y curso, p. ej. "T1 base de datos".
 ---
 
-# contexto-evaluacion
+# obtener-contexto-evaluacion
 
 Construye el **expediente** de una evaluación: todos los datos disponibles sobre ella, verificados y con su
 fuente. No decide qué hacer con ellos; eso lo dice la petición del usuario. El expediente es la base para
