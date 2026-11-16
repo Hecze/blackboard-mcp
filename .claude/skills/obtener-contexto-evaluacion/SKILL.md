@@ -46,6 +46,19 @@ ToolSearch ("blackboard"). Habla con el estudiante en español.
 
 - `bb_download(course, content_id)` → adjuntos, archivos insertados y, en evaluaciones Ultra, los archivos dentro
   de las instrucciones (rúbrica, enunciado, plantillas). Quedan en `<download_dir>\<curso>\Downloads\`.
+- **El enunciado de los exámenes (T1, T2, EF) normalmente NO se puede bajar por API.** Es un `.docx` en
+  "Instrucciones de la actividad" (p. ej. `Jaime Lopez-5373-BASE DE DATOS (T2BO-2886)-T1-Jaime Lopez.docx`) que
+  Blackboard muestra **solo dentro de un intento**. `/learn/api/v1/courses/{c}/assessments/{id}` responde 403 a
+  los alumnos, incluso con un intento abierto. Sin este archivo el expediente queda **ciego** en lo más importante,
+  así que regístralo como pendiente y consíguelo así:
+  - **Nunca abras ni crees intentos con el navegador automático.** La URL `…/attempt/create` inicia un intento, y si
+    la calificación es `Last` un intento de más puede costar la nota.
+  - Pídele al estudiante que, desde su intento, use **"Descargar archivo original"** y lo deje en
+    `estudio/<CÓDIGO>-<evaluación>/enunciado/`. Si ya lo bajó, búscalo en su carpeta de Descargas
+    (`C:\Users\<usuario>\Downloads`).
+  - Si la evaluación ya fue **enviada o calificada**, el archivo también suele estar en la revisión del intento.
+  - Si el profesor prohibió la IA en esa evaluación y todavía no se entregó, no leas el enunciado: regístralo como
+    pendiente y explícale el motivo al estudiante.
 - La **rúbrica** puede estar en otra parte. En BD estaba como `.xlsx` en *INFORMACIÓN GENERAL DEL CURSO* y en
   *ENTREGABLES DEL PROYECTO*. Búscala en el manifiesto del paso 3: `rúbrica|rubrica|criterio|lineamiento`.
 - Extrae los **criterios y niveles** de la rúbrica tal cual, sin resumirlos.
