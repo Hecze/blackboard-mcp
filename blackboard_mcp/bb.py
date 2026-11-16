@@ -324,6 +324,17 @@ class Blackboard:
         aid = (item.get("contentHandler") or {}).get("assessmentId")
         if not aid:
             return ""
+        # The content item's own detail carries the assessment (instructions + attached files) and is readable by
+        # students even for exams whose /assessments/{id} answers 403 (e.g. Cibertec's T1/T2) — read-only, it
+        # never starts an attempt.
+        try:
+            d = self.get(f"/learn/api/v1/courses/{course_pk}/contents/{item['id']}", includeInActivityTracking="false")
+            for det in (d.get("contentDetail") or {}).values():
+                a = ((det or {}).get("test") or {}).get("assessment")
+                if a:
+                    return "\n".join((a.get(k) or {}).get("rawText") or "" for k in ("instructions", "description"))
+        except (PermissionError, httpx.HTTPStatusError, ValueError):
+            pass
         try:
             a = self.get(f"/learn/api/v1/courses/{course_pk}/assessments/{aid}")
         except (PermissionError, httpx.HTTPStatusError, ValueError):
