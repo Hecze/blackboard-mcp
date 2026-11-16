@@ -21,18 +21,42 @@ _ALERT = (
     "anything else, and ask them to sign in again with bb_login. "
 ) if _health and not _health.get("ok") else ""
 
+# Each tool's own description says what it does; the server instructions only carry what applies to all of them.
 mcp = FastMCP(
     "blackboard",
     instructions=_ALERT + (
-        "Tools for the student's Blackboard (Ultra). bb_courses lists current courses; bb_browse shows a course's "
-        "content; bb_upcoming lists due dates; bb_evaluations lists every evaluation with the student's submission status and "
-        "the teacher's attached files (rubrics); bb_announcements shows recent announcements; bb_download saves one "
-        "item's files; bb_sync downloads every current course's PDFs, skipping sites that aren't courses and posters, "
-        "handbooks and forms (check bb_sync_status; bb_set_courses changes which courses it pulls). If any tool reports "
-        "that sign-in is needed, call bb_login, which opens a browser window for the university sign-in."
-        " If any tool returns login_required, that is CRITICAL: tell the student at once, prominently."
+        "Read-only tools for the student's Blackboard (Ultra) and recorded classes. Results are compact JSON: empty or "
+        "null fields are omitted. If any tool returns login_required, that is CRITICAL: tell the student at once, "
+        "prominently, and offer bb_login (it opens a browser window where the student signs in)."
     ),
 )
+
+
+def _compact(obj):
+    """Drop None / "" / [] / {} recursively (keeps 0 and False: a 0 score is data)."""
+    if isinstance(obj, dict):
+        out = {k: _compact(v) for k, v in obj.items()}
+        return {k: v for k, v in out.items() if v not in (None, "", [], {})}
+    if isinstance(obj, list):
+        return [_compact(v) for v in obj]
+    return obj
+
+
+def tool(fn):
+    """Register `fn` as an MCP tool whose result goes out ONCE, as compact JSON text without empty fields.
+
+    FastMCP would otherwise send a dict twice (indented JSON text + structuredContent) and publish an output schema.
+    The Python function itself keeps returning dicts, so it can still be called directly (tests, harnesses without MCP).
+    """
+    import functools
+    import json
+
+    @functools.wraps(fn)
+    async def wrapper(*args, **kwargs):
+        return json.dumps(_compact(await fn(*args, **kwargs)), ensure_ascii=False, separators=(",", ":"), default=str)
+
+    mcp.tool(structured_output=False)(wrapper)
+    return fn
 
 _job: dict = {"running": False}
 _job_lock = threading.Lock()
@@ -56,7 +80,7 @@ async def _run(fn, *args):
         return {"error": str(e)}
 
 
-@mcp.tool()
+@tool
 async def bb_login(timeout_seconds: int = 300) -> dict:
     """Sign in to Blackboard. Opens a Chrome window at the university sign-in page; the student completes it
     there (SSO + MFA). Tries a silent refresh first, so it often finishes without any window."""
@@ -68,7 +92,7 @@ async def bb_login(timeout_seconds: int = 300) -> dict:
     return await _run(go)
 
 
-@mcp.tool()
+@tool
 async def bb_status() -> dict:
     """Which Blackboard and account this is, where files download to, and when the last sync ran."""
     def go():
@@ -81,9 +105,10 @@ async def bb_status() -> dict:
     return await _run(go)
 
 
-@mcp.tool()
-async def bb_courses(include_all: bool = False) -> list[dict] | dict:
-    """List current Blackboard courses (include_all=True: every course and organisation you're enrolled in)."""
+@tool
+async def bb_courses(include_all: bool = False, links: bool = False) -> list[dict] | dict:
+    """List current Blackboard courses (include_all=True: every course and organisation you're enrolled in).
+    `links=True` adds each item's Blackboard URL (omitted by default to keep the answer short)."""
     def go():
         bb = _bb()
         syncer = Syncer(_settings, bb)
@@ -93,13 +118,13 @@ async def bb_courses(include_all: bool = False) -> list[dict] | dict:
         now_ids = {c.id for c in current}
         cs = bb.courses(include_organisations=True) if include_all else current
         return [{"id": c.id, "course_id": c.course_id, "code": c.code, "name": c.name,
-                 "last_accessed": c.last_accessed, "url": c.url, "synced": c.id in now_ids and c.id not in why,
+                 "last_accessed": c.last_accessed, "url": c.url if links else None, "synced": c.id in now_ids and c.id not in why,
                  "why_not": why.get(c.id) or ("" if c.id in now_ids else "not this year's, or an organisation")}
                 for c in cs]
     return await _run(go)
 
 
-@mcp.tool()
+@tool
 async def bb_set_courses(include: list[str] | None = None, exclude: list[str] | None = None) -> dict:
     """Choose which courses a full bb_sync pulls, overriding its guess. `include`: courses (id, code or name) to
     pull even though they look like an info site; `exclude`: ones to stop pulling. Saved for every later sync.
@@ -124,10 +149,11 @@ async def bb_set_courses(include: list[str] | None = None, exclude: list[str] | 
     return await _run(go)
 
 
-@mcp.tool()
-async def bb_browse(course: str, folder_id: str | None = None) -> dict:
+@tool
+async def bb_browse(course: str, folder_id: str | None = None, links: bool = False) -> dict:
     """List the content in a course (or inside one folder): titles, types, text, links and grade columns.
-    `course` can be a course code, part of its name, or its id."""
+    `course` can be a course code, part of its name, or its id.
+    `links=True` adds each item's Blackboard URL (omitted by default to keep the answer short)."""
     def go():
         bb = _bb()
         c = bb.find_course(course)
@@ -137,13 +163,13 @@ async def bb_browse(course: str, folder_id: str | None = None) -> dict:
             "text": html_to_text(it.get("body") or it.get("description"))[:600],
             "links": [l["url"] for l in body_links(it.get("body"), _settings.base_url)][:10],
             "grade_column": (it.get("contentHandler") or {}).get("gradeColumnId"),
-            "open_in_blackboard": bb.web_link(c, it),
+            "open_in_blackboard": bb.web_link(c, it) if links else None,
         } for it in bb.contents(c.id, folder_id)]
         return {"course": c.short_name(), "folder_id": folder_id, "items": items}
     return await _run(go)
 
 
-@mcp.tool()
+@tool
 async def bb_download(course: str, content_id: str) -> dict:
     """Download every file attached to (or embedded in) one content item. Returns the local paths."""
     def go():
@@ -160,7 +186,7 @@ async def bb_download(course: str, content_id: str) -> dict:
     return await _run(go)
 
 
-@mcp.tool()
+@tool
 async def bb_upcoming(days: int = 21) -> dict:
     """Due dates from Blackboard for the next `days` days (assignments, quizzes, Turnitin)."""
     def go():
@@ -175,50 +201,56 @@ async def bb_upcoming(days: int = 21) -> dict:
     return await _run(go)
 
 
-@mcp.tool()
-async def bb_evaluations(course: str | None = None, only_open: bool = False) -> dict:
+@tool
+async def bb_evaluations(course: str | None = None, only_open: bool = False, links: bool = False) -> dict:
     """Every evaluation (assignments, tests, exams) in one course, or in all current courses if none is given:
     due date, the student's own status (pending / draft / submitted / graded / overdue), score and feedback,
     the instructions and the files the teacher attached to it (rubrics, templates). Call bb_download with the
-    course and `content_id` to download those files. only_open=True keeps just what still needs handing in."""
+    course and `content_id` to download those files. only_open=True keeps just what still needs handing in.
+    Results are grouped by course.
+    `links=True` adds each item's Blackboard URL (omitted by default to keep the answer short)."""
     def go():
         bb = _bb()
         cs = [bb.find_course(course)] if course else Syncer(_settings, bb).courses()
-        out = []
+        by_course: dict[str, list] = {}
+        counts: dict[str, int] = {}
         for c in cs:
             for e in bb.evaluations(c):
                 if only_open and (e["kind"] != "submission" or e["status"] not in ("pending", "draft", "overdue")):
                     continue
-                out.append({"course": c.short_name(), **e})
-        out.sort(key=lambda e: (e["due"] is None, e["due"] or ""))
-        counts: dict[str, int] = {}
-        for e in out:
-            counts[e["status"]] = counts.get(e["status"], 0) + 1
-        return {"counts": counts, "evaluations": out}
+                if not links:
+                    e.pop("open_in_blackboard", None)
+                by_course.setdefault(c.short_name(), []).append(e)
+                counts[e["status"]] = counts.get(e["status"], 0) + 1
+        for evs in by_course.values():   # bb.evaluations already sorts by due date
+            evs.sort(key=lambda e: (e["due"] is None, e["due"] or ""))
+        return {"counts": counts, "courses": by_course}
     return await _run(go)
 
 
-@mcp.tool()
+@tool
 async def bb_announcements(course: str | None = None, days: int = 14) -> dict:
     """Recent announcements for one course, or for all current courses if none is given."""
     def go():
         bb = _bb()
         cs = [bb.find_course(course)] if course else Syncer(_settings, bb).courses()
         since = datetime.now(timezone.utc) - timedelta(days=days)
-        out = []
+        by_course: dict[str, list] = {}
         for c in cs:
+            anns = []
             for a in bb.announcements(c.id):
                 when = parse_dt(a.get("created"))
                 if when and when < since:
                     continue
-                out.append({"course": c.short_name(), "title": a.get("title"), "posted": a.get("created"),
-                            "text": html_to_text(a.get("body"))[:1500]})
-        out.sort(key=lambda a: a["posted"] or "", reverse=True)
-        return {"days": days, "announcements": out}
+                anns.append({"title": a.get("title"), "posted": a.get("created"),
+                             "text": html_to_text(a.get("body"))[:1500]})
+            if anns:
+                by_course[c.short_name()] = sorted(anns, key=lambda a: a["posted"] or "", reverse=True)
+        return {"days": days, "courses": by_course}
     return await _run(go)
 
 
-@mcp.tool()
+@tool
 async def bb_pull_course(course: str) -> dict:
     """Download EVERYTHING in one course into <download folder>/<course>/Todo/, keeping Blackboard's folders:
     all files (slides, guides, SQL, xlsx…), files inside evaluations (rubrics, statements), files and class
@@ -254,23 +286,24 @@ def _class_targets(cc, course: str | None) -> list[dict]:
     return hits
 
 
-@mcp.tool()
+@tool
 async def bb_recordings(course: str | None = None) -> dict:
     """Recorded live lessons (Class / Zoom) for one course — its TEO and LAB rooms — or for every class.
-    Each recording has a date, duration and status; pass class_uuid + recording_id to bb_transcript."""
+    Grouped by class room; each recording has a date, duration and status. Pass the room's class_uuid + a
+    recording_id to bb_transcript."""
     from .classcom import ClassLoginRequired
 
     def go():
         cc = _class_client()
-        out = []
+        classes = {}
         for c in _class_targets(cc, course):
-            for r in cc.recordings(c["class_uuid"]):
-                out.append({"class_name": c["class_name"], "teacher": c.get("teacher"), "class_uuid": c["class_uuid"],
-                            "recording_id": r["recordingId"], "when": r.get("when"), "status": r.get("status"),
-                            "duration": time.strftime("%H:%M:%S", time.gmtime(r.get("duration") or 0)),
-                            "transcript_saved": _transcript_path(c["class_name"], r).exists()})
-        out.sort(key=lambda r: r["when"] or "", reverse=True)
-        return {"recordings": out}
+            recs = [{"recording_id": r["recordingId"], "when": r.get("when"), "status": r.get("status"),
+                     "duration": time.strftime("%H:%M:%S", time.gmtime(r.get("duration") or 0)),
+                     "transcript_saved": _transcript_path(c["class_name"], r).exists()}
+                    for r in cc.recordings(c["class_uuid"])]
+            recs.sort(key=lambda r: r["when"] or "", reverse=True)
+            classes[c["class_name"]] = {"class_uuid": c["class_uuid"], "teacher": c.get("teacher"), "recordings": recs}
+        return {"classes": classes}
     try:
         return await _run(go)
     except ClassLoginRequired as e:
@@ -282,7 +315,7 @@ def _transcript_path(class_name: str, rec: dict):
     return _settings.download_dir / "Grabaciones" / safe(class_name or "Class", 80) / f"{when} {rec.get('recordingId', rec.get('recording_id', ''))[:8]}.md"
 
 
-@mcp.tool()
+@tool
 async def bb_transcript(course: str | None = None, class_uuid: str | None = None, recording_id: str | None = None,
                         refresh: bool = False) -> dict:
     """Save readable transcripts of recorded lessons as Markdown: who speaks (🎓 PROFESOR vs 🙋 Alumno by name,
@@ -329,7 +362,7 @@ def _sync_worker(courses):
         _job["running"] = False
 
 
-@mcp.tool()
+@tool
 async def bb_sync(courses: list[str] | None = None, wait_seconds: int = 20) -> dict:
     """Download the PDFs (slides, readings, worksheets) from every current course, or just `courses`, into
     <download folder>/<course>/<week>/ (SlideMate's library if it's set up). Only new or changed files are
@@ -345,7 +378,7 @@ async def bb_sync(courses: list[str] | None = None, wait_seconds: int = 20) -> d
     return await bb_sync_status()
 
 
-@mcp.tool()
+@tool
 async def bb_sync_status() -> dict:
     """Progress (while running) or the result of the most recent bb_sync."""
     if _job.get("running"):

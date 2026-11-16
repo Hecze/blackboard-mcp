@@ -10,6 +10,16 @@ Construye el **expediente** de una evaluación: todos los datos disponibles sobr
 fuente. No decide qué hacer con ellos; eso lo dice la petición del usuario. El expediente es la base para
 cualquier tarea posterior.
 
+**Regla del peor escenario.** Supón un profesor que buscará cualquier detalle para bajar puntos. Lo que dijo
+**una sola vez**, de pasada, a mitad de una clase de 4 horas, cuenta igual que la rúbrica (por ejemplo, "usen tal
+tipo de fuente", "el nombre del archivo así", "sin tildes", "en mayúsculas", "nada de flechas").
+- **No resumas ni descartes requisitos.** Cada indicación, preferencia, prohibición o corrección del profesor va
+  al expediente con su **cita textual** y su **fuente** (clase + `[hh:mm:ss]`, anuncio, archivo y página). Si dudas
+  de si algo es un requisito, regístralo.
+- **Las transcripciones se leen enteras**, nunca por muestreo ni solo con búsquedas. Las búsquedas sirven para
+  volver a encontrar algo, no para decidir qué leer.
+- Si dos fuentes se contradicen, registra las dos.
+
 Entrada: `<evaluación> <curso>`, por ejemplo `T1 base de datos` o `examen final GDAT5373`.
 Salida: `estudio/<CÓDIGO>-<evaluación>/` en este repo (la carpeta `estudio/` está en `.gitignore`: nunca va al
 fork público). Contiene `EXPEDIENTE.md` y los informes por clase.
@@ -100,12 +110,16 @@ El sílabo es la versión oficial, **no la última palabra**: el profesor la aju
 
 1. `bb_recordings(course)` → grabaciones de las salas de Class del curso (TEO y LAB por separado). Una en
    `RECORDING` es una clase en vivo y todavía no tiene transcripción.
-2. `bb_transcript(course)` → guarda las transcripciones que falten. Cada línea sale como **🎓 PROFESOR** o
-   **🙋 Alumno: nombre**, con `[hh:mm:ss]` de la grabación y el chat (💬) intercalado. Viene de Zoom, así que es
-   buena pero automática: corrige por contexto ("Edgar Lean" = Edgar Codd, "Mag Size" = MAXSIZE).
+2. `bb_transcript(course)` → guarda las transcripciones que falten (`refresh=True` las rehace). Arriba hay una
+   leyenda (🎓 = el profesor; 🙋 + nombre corto = cada alumno, con su nombre completo). Cada párrafo empieza con
+   `[hh:mm:ss] 🎓:` o `[hh:mm:ss] 🙋 Nombre:`, y el chat (💬) va intercalado. **No se omite nada**. Viene de Zoom,
+   así que es buena pero automática: corrige por contexto ("Edgar Lean" = Edgar Codd, "Mag Size" = MAXSIZE).
 3. Analiza **cada transcripción por separado**: un subagente por clase, en paralelo, si tu harness los tiene; si
    no, una tras otra. Cada clase dura unas 4 h (90–170 KB): léela **entera**, en partes, y guarda el informe en
    `estudio/<CÓDIGO>-<evaluación>/clases/<fecha>-<TEO|LAB>.md` con:
+   - **todas** las indicaciones, preferencias, prohibiciones y correcciones del profesor, por pequeñas que sean
+     (formato, nombres, fuentes, notación, estilo), cada una con cita textual y `[hh:mm:ss]`. Esta lista es
+     exhaustiva, no un resumen (regla del peor escenario);
    - los temas en orden, con marcas de tiempo, y **el último tema visto**;
    - definiciones y criterios **con las palabras del profesor** (qué exige, qué corrige, qué no acepta, su
      notación y su estilo de código);
@@ -139,8 +153,9 @@ Los hechos van con su fuente, sin recomendaciones ni consejos. Estructura:
    (archivo o texto), tiempo, peso en el promedio, nota mínima, estado y nota actual.
 3. **Reglas dichas por el profesor**: uso de IA, materiales permitidos, modalidad. Cita y marca de tiempo de cada una.
 4. **Alcance**: tabla de qué entra y qué no entra (teoría / laboratorio), con la cita que lo justifica.
-5. **Criterios de evaluación**: rúbrica completa (criterios, niveles, puntajes), más lo que el profesor dijo que
-   exige o penaliza.
+5. **Criterios de evaluación**: rúbrica completa (criterios, niveles, puntajes), más **la lista exhaustiva de
+   requisitos dichos por el profesor**: cada uno con cita textual y fuente (clase y `[hh:mm:ss]`, anuncio o
+   archivo), aunque lo haya dicho una sola vez. Es la sección más importante para la regla del peor escenario.
 6. **Contenido por tema dentro del alcance**: conceptos con los criterios del profesor, sintaxis en su estilo y
    errores que corrigió en clase. Enlaza a los informes de `clases/`.
 7. **Ejercicios y casos de referencia**: los resueltos en clase y los de práctica del curso (`Experimentar_*`,

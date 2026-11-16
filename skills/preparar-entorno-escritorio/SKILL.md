@@ -81,18 +81,7 @@ Es un servidor MCP **stdio** estándar:
 - argumentos `windows-mcp serve`, más restricciones, por ejemplo `--exclude-tools PowerShell,Registry`;
 - variable de entorno `ANONYMIZED_TELEMETRY=false`.
 
-Regístralo en el cliente que uses. Ejemplos (sigue la documentación de tu cliente):
-- **Claude Code**: `claude mcp add --transport stdio --scope user -e ANONYMIZED_TELEMETRY=false windows-mcp -- uvx windows-mcp serve --exclude-tools PowerShell,Registry`
-- **Claude Desktop, Cursor y otros** con `mcpServers` en JSON:
-  `{"mcpServers": {"windows-mcp": {"command": "uvx", "args": ["windows-mcp", "serve"], "env": {"ANONYMIZED_TELEMETRY": "false"}}}}`
-- **OpenCode** (`opencode.json`):
-  `{"mcp": {"windows-mcp": {"type": "local", "command": ["uvx", "windows-mcp", "serve"], "environment": {"ANONYMIZED_TELEMETRY": "false"}}}}`
-- **Codex CLI** (`~/.codex/config.toml`):
-  `[mcp_servers.windows-mcp]` con `command = "uvx"`, `args = ["windows-mcp", "serve"]` y
-  `env = { ANONYMIZED_TELEMETRY = "false" }`.
-
-Si el cliente no hereda el PATH (por ejemplo, la app de la Microsoft Store), usa la ruta absoluta de `uvx.exe`.
-"Connection closed" suele significar justo eso.
+Cómo registrarlo en Claude Code o Desktop, Cursor, VS Code, OpenCode o Codex: **[reference/clientes-mcp.md](reference/clientes-mcp.md)**.
 
 Cómo usarlo bien:
 - **Primero `Snapshot`** (el árbol de la ventana) y después **clic por nombre**. Las coordenadas solo como último
@@ -131,19 +120,8 @@ web, mejor un navegador automatizado que el escritorio.
 
 ## 4. Documentos Word (.docx)
 
-Si se pide Word o un `.docx`, se trabaja sobre el `.docx`. MCP de terceros, por orden de preferencia (revisa el
-estado de cada repositorio antes de usarlo):
-- **[docx-mcp](https://mcpservers.org/fr/servers/securityronin/docx-mcp)**: comando `uvx docx-mcp-server`.
-  Control de cambios, comentarios, notas al pie, `insert_image`.
-- **[MeterLong/MCP-Doc](https://playbooks.com/mcp/meterlong/mcp-doc)**: tablas (crear, combinar, editar celdas) e
-  imágenes con tamaño.
-- **[GongRzhe/Office-Word-MCP-Server](https://github.com/GongRzhe/Office-Word-MCP-Server)**: el más completo
-  (`add_table`, `add_picture`, `convert_to_pdf`, insertar cerca de un texto…), pero **archivado desde marzo de
-  2026**. Comando: `uvx --from office-word-mcp-server word_mcp_server`.
-- Sin MCP: `python-docx`. Inserta **relativo a un texto ancla**, nunca por índice de párrafo.
-
-**Vista previa visual** (comprobar que no se rompió el formato): Word → PDF (`convert_to_pdf` o Word por COM) y
-después `python scripts\pdf2png.py archivo.pdf`. La alternativa comercial es Aspose.Words MCP (licencia).
+Si se pide Word o un `.docx`, se trabaja sobre el `.docx`. Qué MCP usar, cómo insertar sin romper el formato
+y cómo previsualizarlo: **[reference/word.md](reference/word.md)**.
 
 ## 5. Diagramas y PDF
 
@@ -191,27 +169,7 @@ intenta compilarla y falla.
       anotados.
 - [ ] Sesión de Windows dedicada al agente, y nada con permisos de administrador permanentes.
 
-## ARM64 (Windows on ARM)
+## ARM64
 
-Probado el 16/11/2026 en Windows 11 Home ARM64 (26200), con Windows en español. ✅ = verificado en ese PC,
-⚠️ = sin verificar.
-
-| Herramienta | Estado | Cómo |
-|---|---|---|
-| **yEd 3.25.1** | ✅ con Java ARM64 | `yEd.exe` usa su `jre\` **x64** emulado y se cerraba (`RADAR_PRE_LEAK_64`). `scripts\env\install-yed-arm64.ps1` instala Microsoft OpenJDK 21 ARM64 (zip portátil, sin admin) en `~\tools\jdk-21-arm64` y crea accesos directos **"yEd (ARM64)"** que ejecutan `javaw -jar yed.jar`. Probado: la ventana se abre y queda estable. No uses el acceso directo original. |
-| **SQL Server 2025 + SSMS 22** | ✅ x64 emulado | El servicio corre emulado y responde a `sqlcmd`. Instalador: medio **en-US** (ver paso 3). Hay drivers ODBC 18 **ARM64** nativos. |
-| **PyMuPDF** | ✅ solo `==1.28.2` | `pip install "pymupdf==1.28.2"` (binario `cp310-abi3-win_arm64`). Sin versión, pip toma la 2.1 y falla al compilar. |
-| **pypdfium2** | ✅ | 5.15.2, binario ARM64. |
-| **Pillow, uv** | ✅ | Binarios ARM64 (`pip install pillow uv`). |
-| **Mermaid CLI** | ✅ con Edge | El Chrome que baja Puppeteer es x64; usa Edge (ARM64 nativo): `PUPPETEER_SKIP_DOWNLOAD=1 npm i @mermaid-js/mermaid-cli` y `mmdc -p pptr.json …` con `{"executablePath": "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"}`. **Solo si no se pidió yEd.** |
-| **Graphviz** | ⚠️ solo x64 | winget no tiene instalador arm64 de `Graphviz.Graphviz`; debería correr emulado. |
-| **Windows-MCP** | ⚠️ sin verificar | Necesita Python 3.14 (`uv python install 3.14` baja la versión ARM64). Pendiente probarlo en ARM64. |
-| **Java Access Bridge con yEd** | ⚠️ sin verificar | `jabswitch -enable` del JDK ARM64. |
-
-Reglas en ARM64:
-- Antes de instalar algo, comprueba si hay versión ARM64: `winget show --id <ID> --architecture arm64`. "No
-  applicable installer" significa que solo hay x64, que correrá emulado.
-- En apps Java, el problema suele ser **el JRE x64 incluido**, no la app: ejecuta el `.jar` con un JDK ARM64.
-- Para automatizar el navegador, Edge es ARM64 nativo; el Chrome de Puppeteer o Playwright es x64.
-- Paquetes de Python: si pip intenta compilar, busca la última versión con binario `win_arm64`
-  (`pip download <pkg>==<versión> --only-binary=:all:`) y fíjala.
+Si `probe.ps1` dice `"arch": "ARM64"`, lee **[reference/arm64.md](reference/arm64.md)**: qué funciona, qué corre emulado y
+cómo (yEd con JDK ARM64, PyMuPDF `==1.28.2`, Mermaid con Edge, SQL Server x64 emulado).

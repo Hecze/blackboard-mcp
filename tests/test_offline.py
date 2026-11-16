@@ -167,9 +167,11 @@ def test_class_transcript_vtt_and_markdown():
     md = to_markdown({"class_name": "BD TEO", "start": datetime(2026, 11, 9, 19, 19, tzinfo=timezone.utc),
                       "duration_s": 100, "teacher": "JAIME FACTOR LOPEZ LOPEZ", "source": "zoom", "participants": 3,
                       "lines": lines, "chats": [{"t": 789.0, "speaker": "OLVER", "text": "Hola", "chat": True}]})
-    assert "**[00:12:55] 🎓 PROFESOR (Jaime Factor Lopez Lopez):** Buenas tardes. Empezamos." in md
-    assert "🙋 Alumno: Hebert Roberto Salvador Cordero" in md and "y a y a" not in md
-    assert "💬 [00:13:09] **Olver** (chat): Hola" in md
+    assert "**[00:12:55] 🎓:** Buenas tardes. Empezamos." in md
+    assert "**[00:13:10] 🙋 Hebert:** Profesor, una consulta." in md and "y a y a" not in md
+    assert "- 🎓 = profesor Jaime Factor Lopez Lopez" in md
+    assert "- 🙋 Hebert = Hebert Roberto Salvador Cordero" in md and "- 🙋 Olver = Olver (solo chat)" in md
+    assert "> 💬 [00:13:09] 🙋 Olver: Hola" in md
     assert "09/11/2026 14:19" in md   # Lima time
 
 
@@ -202,3 +204,25 @@ def test_docs_have_no_control_characters():
     for f in files:
         bad = [c for c in f.read_text(encoding="utf-8-sig") if ord(c) < 32 and c not in "\n\r"]  # tabs too: one was a mangled "\t"
         assert not bad, f"{f.name} has control characters (a mangled backslash?)"
+
+
+def test_transcript_aliases_unique():
+    from blackboard_mcp.classcom import _aliases
+    a = _aliases(["JUAN JOSE NOVOA GUERRERO", "JUAN PEREZ LOPEZ", "OLVER EDGAR MONTALVO SABINO"])
+    assert a["OLVER EDGAR MONTALVO SABINO"] == "Olver"
+    assert len(set(a.values())) == 3 and a["JUAN PEREZ LOPEZ"] != a["JUAN JOSE NOVOA GUERRERO"]
+
+
+def test_mcp_tool_output_is_compact_json_once():
+    import asyncio
+    from blackboard_mcp import server
+
+    @server.tool
+    async def _probe_tool() -> dict:
+        """test only"""
+        return {"a": None, "b": "", "c": [], "d": 0, "e": {"f": None, "g": False}, "h": "x"}
+
+    r = asyncio.run(server.mcp.call_tool("_probe_tool", {}))
+    blocks = r[0] if isinstance(r, tuple) else r
+    assert [b.text for b in blocks] == ['{"d":0,"e":{"g":false},"h":"x"}']   # 0 and False kept, empties dropped
+    assert not (isinstance(r, tuple) and r[1])                                # no duplicate structured copy

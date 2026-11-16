@@ -226,30 +226,48 @@ def parse_vtt(vtt: str) -> list[dict]:
     return out
 
 
+def _aliases(names: list[str]) -> dict[str, str]:
+    """Short, unique names for the legend: first given name, then + first surname / initial if two clash."""
+    words = {n: n.title().split() for n in names}
+    alias = {n: (w[0] if w else n) for n, w in words.items()}
+    for level in (2, 3):
+        clash = {a for a in alias.values() if list(alias.values()).count(a) > 1}
+        for n in names:
+            if alias[n] in clash and len(words[n]) >= level:
+                alias[n] = " ".join(words[n][:1] + words[n][level - 1:level])   # "Juan Novoa", "Juan Perez"
+    return alias
+
+
 def to_markdown(tr: dict, tz_offset_h: int = -5) -> str:
-    """Readable transcript: consecutive lines of one speaker merged into a paragraph, the teacher marked as
-    such, students by name, and the public chat interleaved where it happened."""
+    """Readable, compact transcript. Nothing is summarised or dropped: every spoken line and every chat message is
+    kept (any passing remark may matter). Speakers are 🎓 (the teacher) or 🙋 + a short name, expanded once in the
+    legend; consecutive lines of one speaker are merged into a paragraph; the public chat is interleaved."""
     teacher = tr.get("teacher")
     tn = set(_norm(teacher).split()) if teacher else set()
 
-    def role(name: str) -> str:
-        if teacher and (name == teacher or (tn and len(tn & set(_norm(name).split())) >= 2)):
-            return f"🎓 PROFESOR ({name.title()})"
-        return f"🙋 Alumno: {name.title()}" if name != "?" else "❔ (no identificado)"
+    def is_teacher(name: str) -> bool:
+        return bool(teacher) and (name == teacher or (len(tn) > 0 and len(tn & set(_norm(name).split())) >= 2))
+
+    people = sorted({x["speaker"] for x in tr["lines"] + tr["chats"] if x["speaker"] != "?" and not is_teacher(x["speaker"])})
+    alias = _aliases(people)
+
+    def who(name: str) -> str:
+        if is_teacher(name):
+            return "🎓"
+        return f"🙋 {alias[name]}" if name in alias else "❔"
 
     items = sorted(tr["lines"] + tr["chats"], key=lambda x: x["t"])
     local = tr["start"].astimezone(timezone(timedelta(hours=tz_offset_h)))
-    spoken = [x for x in tr["lines"]]
-    students = sorted({x["speaker"] for x in spoken if role(x["speaker"]).startswith("🙋")})
+    spoke = {x["speaker"] for x in tr["lines"]}
     head = [
         f"# {tr['class_name']} — {local:%d/%m/%Y %H:%M}",
         "",
-        f"- Duración: {_hms(tr.get('duration_s') or 0)} · Asistentes: {tr.get('participants')} · "
-        f"Profesor: {(teacher or '?').title()}",
-        f"- Transcripción: {'Zoom (con nombre de cada hablante)' if tr['source'] == 'zoom' else 'subtítulos en vivo de Class (calidad baja)'}"
-        " — es automática: puede tener palabras mal reconocidas.",
-        f"- Alumnos que hablaron: {', '.join(s.title() for s in students) or 'ninguno'}",
-        f"- 💬 = mensaje del chat · [hh:mm:ss] = minuto de la grabación",
+        f"Duración {_hms(tr.get('duration_s') or 0)} · {tr.get('participants')} asistentes · transcripción "
+        f"{'de Zoom (con hablantes)' if tr['source'] == 'zoom' else 'de subtítulos en vivo de Class (calidad baja)'}, "
+        "automática: puede tener palabras mal reconocidas. [hh:mm:ss] = minuto de la grabación · 💬 = chat.",
+        "",
+        f"- 🎓 = profesor {(teacher or '?').title()}",
+        *[f"- 🙋 {alias[n]} = {n.title()}{'' if n in spoke else ' (solo chat)'}" for n in people],
         "",
         "---",
         "",
@@ -258,13 +276,13 @@ def to_markdown(tr: dict, tz_offset_h: int = -5) -> str:
 
     def flush():
         if buf:
-            body.append(f"**[{_hms(t0)}] {role(cur)}:** {' '.join(buf)}\n")
+            body.append(f"**[{_hms(t0)}] {who(cur)}:** {' '.join(buf)}\n")
 
     for x in items:
         if x.get("chat"):
             flush()
             buf, cur = [], None
-            body.append(f"> 💬 [{_hms(x['t'])}] **{x['speaker'].title()}** (chat): {x['text']}\n")
+            body.append(f"> 💬 [{_hms(x['t'])}] {who(x['speaker'])}: {x['text']}\n")
             continue
         if x["speaker"] == cur and x["t"] - last_end < 25 and len(" ".join(buf)) < 1200:
             buf.append(x["text"])
