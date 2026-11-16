@@ -29,12 +29,14 @@ When it happens:
 
 When starting work in this repo, glance at `session-health.json` first and apply the above if it isn't ok.
 
-## Preparing for an evaluation
+## Working on an evaluation (T1, T2, final exam, project…)
 
-When the student asks to prepare for an exam/assignment, follow **[docs/PREPARAR-EVALUACION.md](docs/PREPARAR-EVALUACION.md)**
-step by step (find it → its files → `bb_pull_course` → syllabus → `bb_recordings`/`bb_transcript` with one subagent per
-class → announcements → scope → AI-use rules → study guide in `estudio/`). If the teacher forbids AI in that evaluation,
-only help prepare: never solve it or review its answers before submission.
+Gather its full context with the project skill **`contexto-evaluacion`**
+([.claude/skills/contexto-evaluacion/SKILL.md](.claude/skills/contexto-evaluacion/SKILL.md)): it finds the evaluation,
+its files and settings, pulls the whole course (`bb_pull_course`), reads the syllabus, transcribes and analyses every
+recorded class (`bb_recordings`/`bb_transcript`, one subagent per class), checks announcements, settles the scope and
+writes a sourced dossier in `estudio/<CODE>-<evaluation>/EXPEDIENTE.md`. Then do whatever the user asked with it,
+respecting the teacher's rules recorded there (e.g. AI forbidden in that evaluation).
 
 ## How the session stays alive
 
