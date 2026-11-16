@@ -1,154 +1,168 @@
 ---
 name: preparar-entorno-escritorio
 description: >-
-  Deja listo un PC Windows (x86_64 o ARM64) para que un agente trabaje con aplicaciones de escritorio de los cursos (SQL Server + SSMS, yEd, Word/.docx, diagramas, PDF) usando herramientas que ya existen — MCP de automatización de Windows por árbol de accesibilidad, MCP de Word, renderizado de diagramas y PDF sin interfaz — en vez de scripts hechos a mano (SendKeys, clics por coordenadas, brokers con permisos de administrador). Úsala antes de cualquier tarea que necesite manejar programas de escritorio o editar documentos.
+  Deja listo un PC Windows (x86_64 o ARM64) para que un agente trabaje con las aplicaciones de escritorio de los cursos (SQL Server + SSMS, yEd, Word/.docx, diagramas, PDF) usando los scripts de este repo y herramientas que ya existen (MCP de automatización de Windows por árbol de accesibilidad, MCP de Word, render de PDF) en vez de automatización hecha a mano (SendKeys, clics por coordenadas, brokers de administrador). Úsala antes de cualquier tarea que necesite programas de escritorio o editar documentos.
 ---
 
 # preparar-entorno-escritorio
 
-Guía para **obtener e instalar** las herramientas que un agente necesita para trabajar con programas de
-escritorio en Windows. Plataforma: **Windows 10/11 x86_64**, y **ARM64** con las particularidades verificadas al final.
+Cómo **obtener, instalar y comprobar** lo que un agente necesita para trabajar con programas de escritorio en
+Windows 10/11, **x86_64 y ARM64**. Sirve para cualquier agente o harness: todo lo que aquí se pide son
+comandos de PowerShell o Python y servidores MCP estándar (stdio).
 
 Nace de un intento real en el que el agente lo armó todo a mano: SendKeys que acabaron escribiendo en otra
 ventana, clics por coordenadas fallidos, capturas con offset, un broker de administrador hecho en casa e
-instaladores sin progreso. Casi todo eso ya existe hecho y mejor. Esta skill dice qué usar.
+instaladores sin progreso. Casi todo eso ya existe hecho y mejor.
 
 Habla con el estudiante en español. **Instalar software y conceder permisos siempre lo confirma él.**
 
+Scripts del repo (rutas relativas a la raíz; se ejecutan con
+`powershell -ExecutionPolicy Bypass -File <script>`):
+
+| Script | Qué hace | ¿Admin? |
+|---|---|---|
+| `scripts\env\probe.ps1 [-Json]` | Describe el PC: arquitectura **real** del CPU y la del proceso (si difieren, la shell corre emulada), idioma de Windows, runtimes y programas del curso ya instalados | No |
+| `scripts\env\doctor.ps1` | Revisa todo lo que usa el repo (Blackboard, SQL Server, yEd, PDF, Windows-MCP) y da el comando que arregla cada falta. Sale con 1 si falta algo obligatorio | No |
+| `scripts\env\install-sqlserver.ps1 [-Version 2025] [-Edition Developer] [-Locale en-US]` | SQL Server con winget | **Sí** (lo ejecuta el estudiante) |
+| `scripts\env\install-ssms.ps1 [-Version 22]` | SSMS con winget | Lo que pida el instalador |
+| `scripts\env\sql-login.ps1 -Status / -Grant [-Role dbcreator] / -Revoke` | Permite a tu usuario de Windows usar SQL Server **sin elevación** (`sqlcmd`, `pyodbc`), o lo deshace | `-Grant` y `-Revoke`: sí |
+| `scripts\env\install-yed-arm64.ps1` | yEd en ARM64: JDK ARM64 portátil + accesos directos "yEd (ARM64)" | No |
+| `python scripts\pdf2png.py archivo.pdf [salida] [--dpi 150] [--pages 1,3-5]` | Páginas de PDF a PNG (PyMuPDF, o pypdfium2 si no está) | No |
+
 ---
 
-## 0. Reglas de seguridad (antes de instalar nada)
+## 0. Reglas
 
+**Seguridad**
 - **El agente nunca obtiene permisos de administrador permanentes.** Nada de "PowerShell elevado que ejecuta lo
-  que aparezca en una carpeta": cualquier programa que escriba ahí se ejecuta como administrador. Si hay que
-  instalar algo con UAC, **lo ejecuta el estudiante** (el agente le da el comando exacto), o se aprueba un UAC por
-  instalación.
+  que aparezca en una carpeta": cualquier programa que escriba ahí se ejecuta como administrador. Lo que pida
+  UAC lo **ejecuta el estudiante** (el agente le da el comando exacto, en general uno de los scripts de arriba).
+- Para usar SQL Server sin elevación, usa `sql-login.ps1 -Grant` (una vez, como administrador). Es un privilegio
+  que **queda en la máquina**: anótalo, prefiere `-Role dbcreator` si alcanza, y usa `-Revoke` cuando ya no haga falta.
 - **Una sesión de Windows dedicada al agente** (otro usuario local o una VM), no el escritorio donde trabaja el
   estudiante. Así el teclado y los clics nunca caen en su ventana.
-- Los MCP de escritorio tienen **acceso total al sistema**. Restringe sus herramientas (paso 2) y desactiva la
-  telemetría.
-- En Blackboard la IA **nunca envía, guarda ni crea intentos** (ver `obtener-contexto-evaluacion`), y respeta las
-  reglas del profesor sobre uso de IA en cada evaluación.
+- Los MCP de escritorio tienen **acceso total al sistema**: restringe sus herramientas y desactiva la telemetría
+  (paso 2).
+- En Blackboard la IA **nunca envía, guarda ni crea intentos** (ver `obtener-contexto-evaluacion`) y respeta las
+  reglas del profesor sobre el uso de IA en cada evaluación.
 
-## 0.1 Fidelidad a la herramienta pedida
-
+**Fidelidad a la herramienta pedida**
 - **Si el usuario o el curso piden una herramienta concreta (yEd, SSMS, Word…), se usa esa herramienta.** No se
-  sustituye por "algo parecido" (Mermaid o Graphviz en lugar de yEd, LibreOffice en lugar de Word, un script en
-  lugar de SSMS) aunque sea más fácil de automatizar.
-- Esta guía documenta **todas las formas conocidas** de hacer funcionar y automatizar cada herramienta. Si ninguna
-  funciona, se dice claramente qué falla y se pregunta al usuario. No se cambia de herramienta por iniciativa
-  propia.
-- Las herramientas "sin interfaz" del paso 5 son para cuando **no** se pidió una herramienta concreta.
+  sustituye por algo parecido (Mermaid o Graphviz en lugar de yEd, LibreOffice en lugar de Word, un script en
+  lugar de SSMS), aunque sea más fácil de automatizar.
+- Esta guía documenta **todas las formas conocidas** de hacer funcionar y automatizar cada herramienta. Si
+  ninguna funciona, se dice qué falla y se pregunta. No se cambia de herramienta por iniciativa propia.
+- Las herramientas "sin interfaz" (paso 5.2) son para cuando **no** se pidió una herramienta concreta.
 
-## 1. Sondeo del entorno (antes de elegir camino)
+## 1. Sondeo y diagnóstico (siempre lo primero)
 
-Antes de instalar o descargar nada, comprueba esto (en PowerShell):
 ```powershell
-$env:PROCESSOR_ARCHITECTURE                 # AMD64 = x86_64 (esta guía); ARM64 = ver el final
-[System.Globalization.CultureInfo]::CurrentUICulture.Name   # idioma de Windows (es-PE, en-US…)
-(Get-CimInstance Win32_OperatingSystem).Caption
-winget --version; python --version; uv --version; node --version
-Get-Package | Where-Object Name -match 'SQL Server|Management Studio|yEd|Office|Word' | Select Name, Version
+powershell -ExecutionPolicy Bypass -File scripts\env\probe.ps1 -Json
+powershell -ExecutionPolicy Bypass -File scripts\env\doctor.ps1
 ```
-- **El idioma importa**: el instalador de SQL Server falla con un "mismatch de idioma" si la descarga no coincide
-  con el idioma de Windows, y el error solo aparece en un diálogo. Elige la descarga según `CurrentUICulture`.
-- No vuelvas a descargar lo que ya está instalado.
+- Fíjate en `arch` (la máquina) y `process_arch` (la shell). En un PC ARM64 una shell x64 emulada informa
+  `PROCESSOR_ARCHITECTURE=AMD64`, así que no uses esa variable para decidir.
+- `ui_culture` es el idioma de Windows, y afecta al instalador de SQL Server (paso 3).
+- No instales ni descargues lo que `installed` ya muestra.
+- `doctor` dice qué falta y con qué comando se arregla. Vuelve a ejecutarlo al final para confirmar.
 
 ## 2. Automatización del escritorio: Windows-MCP
 
-**[CursorTouch/Windows-MCP](https://github.com/CursorTouch/Windows-MCP)** (MIT, PyPI `windows-mcp`). Lee el
+**[CursorTouch/Windows-MCP](https://github.com/CursorTouch/Windows-MCP)** (MIT, PyPI `windows-mcp`) lee el
 **árbol de accesibilidad (UI Automation)** de las ventanas, incluidas las de fondo, y busca controles por nombre.
-No necesita visión por computadora. Herramientas: Click, Type, Scroll, Shortcut, Wait/WaitFor, Screenshot,
-Snapshot, App, Process, Clipboard, FileSystem, PowerShell, Registry…
+Herramientas: Click, Type, Scroll, Shortcut, Wait/WaitFor, Screenshot, Snapshot, App, Process, Clipboard,
+FileSystem, PowerShell, Registry…
 
-Requisitos: Windows 10/11, **Python 3.14+** y **uv** (`pip install uv`).
+Requisitos: **Python 3.14+** y **uv**. `doctor` lo comprueba; si falta, `pip install uv` y luego
+`uv python install 3.14`.
 
-```powershell
-# Claude Code, para todos los proyectos:
-claude mcp add --transport stdio --scope user windows-mcp -- uvx windows-mcp serve
-claude mcp list            # debe aparecer conectado
-```
-- Restringe lo peligroso. Pasa banderas después de `serve`, por ejemplo `--exclude-tools PowerShell,Registry`,
-  y define `ANONYMIZED_TELEMETRY=false` (con `-e` en `claude mcp add`).
-- Si da "Connection closed", usa la ruta completa de `uvx.exe`.
-- Claude Desktop (`claude_desktop_config.json`):
-  `{"mcpServers": {"windows-mcp": {"command": "uvx", "args": ["windows-mcp", "serve"]}}}`.
-  La versión de Microsoft Store necesita la ruta absoluta de `uvx.exe`.
+Es un servidor MCP **stdio** estándar:
+- comando `uvx`;
+- argumentos `windows-mcp serve`, más restricciones, por ejemplo `--exclude-tools PowerShell,Registry`;
+- variable de entorno `ANONYMIZED_TELEMETRY=false`.
+
+Regístralo en el cliente que uses. Ejemplos (sigue la documentación de tu cliente):
+- **Claude Code**: `claude mcp add --transport stdio --scope user -e ANONYMIZED_TELEMETRY=false windows-mcp -- uvx windows-mcp serve --exclude-tools PowerShell,Registry`
+- **Claude Desktop, Cursor y otros** con `mcpServers` en JSON:
+  `{"mcpServers": {"windows-mcp": {"command": "uvx", "args": ["windows-mcp", "serve"], "env": {"ANONYMIZED_TELEMETRY": "false"}}}}`
+- **OpenCode** (`opencode.json`):
+  `{"mcp": {"windows-mcp": {"type": "local", "command": ["uvx", "windows-mcp", "serve"], "environment": {"ANONYMIZED_TELEMETRY": "false"}}}}`
+- **Codex CLI** (`~/.codex/config.toml`):
+  `[mcp_servers.windows-mcp]` con `command = "uvx"`, `args = ["windows-mcp", "serve"]` y
+  `env = { ANONYMIZED_TELEMETRY = "false" }`.
+
+Si el cliente no hereda el PATH (por ejemplo, la app de la Microsoft Store), usa la ruta absoluta de `uvx.exe`.
+"Connection closed" suele significar justo eso.
 
 Cómo usarlo bien:
 - **Primero `Snapshot`** (el árbol de la ventana) y después **clic por nombre**. Las coordenadas solo como último
   recurso.
-- Usa **`WaitFor`** en lugar de esperas fijas (`Start-Sleep`).
-- Las apps **Java/Swing (como yEd)** casi no exponen UI Automation. Para ellas, ver el paso 5.1 (yEd): atajos de
-  teclado dirigidos a la ventana, Java Access Bridge, o editar el `.graphml` y abrirlo en yEd.
+- Usa **`WaitFor`** en lugar de esperas fijas.
+- Las apps **Java/Swing (como yEd)** casi no exponen UI Automation: ver el paso 5.1.
 
-Alternativas, si Windows-MCP no encaja (sin verificar a fondo):
+Alternativas (sin verificar a fondo):
 - [felenko/WindowsOSMCP](https://github.com/felenko/WindowsOSMCP): `click_element` por nombre o ID;
 - [locomorange/uiautomation-mcp](https://github.com/locomorange/uiautomation-mcp): .NET;
-- FlaUI-MCP (.NET 8, de Scott Hanselman);
+- FlaUI-MCP (.NET 8);
 - servidores basados en **pywinauto**: actúan sin mover el cursor ni robar el foco.
 
-La **app de escritorio de Claude** también trae "computer use", con capturas, clics, teclado y permisos por app.
-Para páginas web, usa el navegador integrado o Claude in Chrome en lugar de automatizar el escritorio.
+Si tu harness trae su propio control del escritorio (computer use) o un navegador, puedes usarlo. Para páginas
+web, mejor un navegador automatizado que el escritorio.
 
-## 3. Instalar programas: winget, con el estudiante aprobando
+## 3. Programas del curso: SQL Server y SSMS
 
-- Busca siempre el ID exacto. No lo adivines:
-  ```powershell
-  winget search "SQL Server"; winget search "Management Studio"; winget search yEd; winget search Graphviz
-  ```
-- Instala mostrando el progreso y guardando un registro:
-  ```powershell
-  winget install --id <ID> --exact --accept-package-agreements --accept-source-agreements --log "$env:TEMP\winget-<ID>.log"
-  ```
-  Ejecútalo en una **pestaña de terminal visible** (no en segundo plano) y sigue el registro. Lo que pida UAC lo
-  aprueba el estudiante.
-- **SQL Server 2022 Developer + SSMS** (curso de Base de Datos):
-  - instálalo con el instalador oficial de Microsoft, en el **idioma de Windows** (paso 1); primero el motor y
-    después SSMS;
-  - si SSMS dice "no se puede ejecutar si la instalación está en curso", hay un `setup.exe` colgado. El estudiante
-    lo cierra desde el Administrador de tareas (como administrador);
-  - el profesor del curso usa SQL Server 2022 Developer + SSMS (ver las transcripciones del LAB 5/11).
-- Para **ejecutar T-SQL** no hace falta la interfaz: `sqlcmd` (viene con SQL Server o como paquete aparte) o
-  Python con `pyodbc`. Usa la interfaz solo cuando se necesite una captura de SSMS.
+- **SQL Server** (el estudiante ejecuta, como administrador):
+  `scripts\env\install-sqlserver.ps1 -Version 2025 -Edition Developer`
+  - IDs de winget verificados: `Microsoft.SQLServer.2025.Developer`, `.2025.Express`, `.2022.Developer`,
+    `.2022.Express`.
+  - **Idioma del medio**: con Windows en **es-ES**, el medio es-ES falló con un diálogo de "mismatch de idioma" y
+    el **inglés (ENU) funcionó**. El script usa `--locale en-US` por defecto. Si aparece ese diálogo, ve directo
+    al medio ENU; no reintentes con el del idioma de Windows.
+  - El profesor del curso usa SQL Server 2022 Developer. 2025 también sirve para los ejercicios.
+- **SSMS**: `scripts\env\install-ssms.ps1` (`Microsoft.SQLServerManagementStudio.22`). Si dice "no se puede
+  ejecutar si la instalación está en curso", hay un `setup.exe` colgado: el estudiante lo cierra desde el
+  Administrador de tareas.
+- **Usar SQL Server sin elevación**: `scripts\env\sql-login.ps1 -Grant` (una vez, como administrador) y luego
+  `-Status`. Así el agente puede usar `sqlcmd -S localhost -E -C -Q "..."` o `pyodbc` con su usuario de Windows.
+- **T-SQL sin interfaz**: `sqlcmd` o Python con `pyodbc` (driver "ODBC Driver 18 for SQL Server"). SSMS solo
+  cuando hace falta la interfaz o una captura de SSMS.
+- Para otros programas: busca el ID con `winget search "<nombre>"` (no lo adivines) e instala con
+  `--log "$env:TEMP\winget-<ID>.log"`, en una terminal visible.
 
 ## 4. Documentos Word (.docx)
 
-Por orden de preferencia (MCP de terceros: revisa el estado del repositorio antes de usarlos):
-- **[docx-mcp](https://mcpservers.org/fr/servers/securityronin/docx-mcp)**: `uvx docx-mcp-server`. Control de
-  cambios, comentarios, notas al pie, `insert_image`.
+Si se pide Word o un `.docx`, se trabaja sobre el `.docx`. MCP de terceros, por orden de preferencia (revisa el
+estado de cada repositorio antes de usarlo):
+- **[docx-mcp](https://mcpservers.org/fr/servers/securityronin/docx-mcp)**: comando `uvx docx-mcp-server`.
+  Control de cambios, comentarios, notas al pie, `insert_image`.
 - **[MeterLong/MCP-Doc](https://playbooks.com/mcp/meterlong/mcp-doc)**: tablas (crear, combinar, editar celdas) e
   imágenes con tamaño.
 - **[GongRzhe/Office-Word-MCP-Server](https://github.com/GongRzhe/Office-Word-MCP-Server)**: el más completo
-  (`add_table`, `add_picture`, `convert_to_pdf`, insertar cerca de un texto…), pero está **archivado desde marzo
-  de 2026**. Úsalo solo si los otros no alcanzan:
-  `uvx --from office-word-mcp-server word_mcp_server`.
-- Sin MCP: `python-docx` en un venv. Inserta **relativo a un texto ancla**, nunca por índice de párrafo.
+  (`add_table`, `add_picture`, `convert_to_pdf`, insertar cerca de un texto…), pero **archivado desde marzo de
+  2026**. Comando: `uvx --from office-word-mcp-server word_mcp_server`.
+- Sin MCP: `python-docx`. Inserta **relativo a un texto ancla**, nunca por índice de párrafo.
 
-**Vista previa visual** (para verificar que no se rompió el formato):
-- Word instalado → `convert_to_pdf` (MCP) o Word por COM → PDF;
-- PDF → PNG por página: paso 5;
-- alternativa comercial con render directo a PNG: Aspose.Words MCP (requiere licencia).
+**Vista previa visual** (comprobar que no se rompió el formato): Word → PDF (`convert_to_pdf` o Word por COM) y
+después `python scripts\pdf2png.py archivo.pdf`. La alternativa comercial es Aspose.Words MCP (licencia).
 
 ## 5. Diagramas y PDF
 
-### 5.1 yEd (cuando se pide yEd, que es lo que usa el curso de Base de Datos)
+### 5.1 yEd (cuando se pide yEd; es lo que usa el curso de Base de Datos)
 
 Instalación: `winget search yEd` o el instalador de yWorks. Queda en `C:\Users\<usuario>\yEd\` con `yEd.exe`,
-`yed.jar` y un Java propio en `jre\`.
+`yed.jar` y un Java propio en `jre\`. **En ARM64**, ejecuta `scripts\env\install-yed-arm64.ps1` (ver ARM64).
 
 Todas las formas de trabajar con yEd:
-1. **Interfaz de yEd** (lo que hace el estudiante): dibujar y luego *File → Export* a PNG, JPG o SVG.
-2. **Generar o editar el `.graphml`** (XML) con código y **abrirlo en yEd**: `yEd.exe archivo.graphml` o
-   `java -jar yed.jar archivo.graphml`. Con *Layout* se reordena y luego se exporta desde yEd. El `.graphml`
-   también es lo que suele entregarse. Los del profesor están en `Todo\ANUNCIOS\*.graphml` y sirven de plantilla
-   para el estilo (formas, pata de gallo).
-3. **Automatizar la interfaz de yEd**: es Swing, así que UI Automation no ve sus controles. Opciones:
-   - **atajos de teclado** dirigidos a la ventana de yEd (Windows-MCP `Shortcut`/`Type` con la ventana enfocada y
-     el título verificado), sin clics a ciegas;
-   - **Java Access Bridge**: `jabswitch -enable` (viene con el JDK) expone los controles Swing a las herramientas
-     de accesibilidad. Bibliotecas que lo usan desde Python: `pyjab`, `JABWrapper`. **Sin verificar con yEd.**
-   - Capturas con `Snapshot`/`Screenshot` de Windows-MCP para comprobar cada paso.
+1. **Interfaz de yEd**: dibujar y luego *File → Export* a PNG, JPG o SVG.
+2. **Generar o editar el `.graphml`** (XML) con código y **abrirlo en yEd**: `java -jar yed.jar archivo.graphml`,
+   o `yEd.exe archivo.graphml` en x86_64. El `.graphml` también es lo que suele entregarse. Los del profesor
+   (`Todo\ANUNCIOS\*.graphml`) sirven de plantilla para el estilo.
+3. **Automatizar la interfaz** (Swing: UI Automation no ve sus controles):
+   - **atajos de teclado** dirigidos a la ventana de yEd, con su título verificado (Windows-MCP
+     `Shortcut`/`Type`);
+   - **Java Access Bridge**: `jabswitch -enable` (viene con el JDK) expone Swing a las herramientas de
+     accesibilidad. Bibliotecas Python: `pyjab`, `JABWrapper`. **Sin verificar con yEd.**
+   - capturas (`Snapshot`/`Screenshot`) para comprobar cada paso.
 4. yEd **no** tiene exportación por línea de comandos. No inventes una.
 
 ### 5.2 Otras herramientas de diagramas (solo si no se pidió una concreta)
@@ -158,58 +172,46 @@ Todas las formas de trabajar con yEd:
 
 ### 5.3 PDF → imagen
 
-- **PyMuPDF**: `pip install pymupdf`, luego `pymupdf.open(p)[0].get_pixmap(dpi=150).save(...)`.
-- **pypdfium2**: `pip install pypdfium2`, luego `pdfium.PdfDocument(p)[0].render(scale=2).to_pil().save(...)`.
+`python scripts\pdf2png.py archivo.pdf [carpeta] --dpi 150 --pages 1-3`. Necesita **`pymupdf==1.28.2`** o
+`pypdfium2`. No instales `pymupdf` sin versión: en ARM64 pip elige la 2.x, que no tiene binario `win_arm64`, e
+intenta compilarla y falla.
 
 ## 6. Capturas
 
-- Con Windows-MCP: `Screenshot` o `Snapshot` de la ventana. Ya no hace falta `CopyFromScreen` con offsets ni
-  `PrintWindow`.
-- Recortar o redimensionar: `Pillow` en Python.
+- Con Windows-MCP: `Screenshot` o `Snapshot` de la ventana (sin `CopyFromScreen` con offsets ni `PrintWindow`).
+- Recortar o redimensionar: `Pillow`.
 
 ## 7. Checklist final
 
-- [ ] Sondeo hecho (arquitectura, idioma, lo que ya está instalado).
-- [ ] `claude mcp list` muestra `windows-mcp` (y el MCP de Word, si se usa) **conectados**.
+- [ ] `probe.ps1` hecho (arquitectura real, idioma, lo ya instalado).
+- [ ] `doctor.ps1` sin `FALTA`.
+- [ ] Los MCP que se usen (Windows-MCP, Word) registrados y **conectados** en el cliente.
 - [ ] Herramientas peligrosas excluidas y telemetría desactivada.
-- [ ] Programas instalados por el estudiante o aprobados por él, con el registro guardado.
-- [ ] Sesión de Windows dedicada al agente.
-- [ ] Nada corre con permisos de administrador permanentes.
+- [ ] Lo que pidió UAC lo ejecutó el estudiante. Privilegios que quedan (como el login de `sql-login.ps1`)
+      anotados.
+- [ ] Sesión de Windows dedicada al agente, y nada con permisos de administrador permanentes.
 
 ## ARM64 (Windows on ARM)
 
 Probado el 16/11/2026 en Windows 11 Home ARM64 (26200), con Windows en español. ✅ = verificado en ese PC,
 ⚠️ = sin verificar.
 
-| Herramienta | Estado en ARM64 | Cómo |
+| Herramienta | Estado | Cómo |
 |---|---|---|
-| **yEd 3.25.1** | ✅ funciona **con Java ARM64** | `yEd.exe` usa su `jre\` **x64** emulado, y por eso se cerraba (`RADAR_PRE_LEAK_64`). Hay que lanzar `yed.jar` con un JDK **ARM64 nativo**: `"<jdk-arm64>\bin\java.exe" -jar C:\Users\<usuario>\yEd\yed.jar [archivo.graphml]`. Probado con Microsoft OpenJDK 21.0.13 aarch64: abrió la ventana "yEd" y siguió estable. JDK: `winget search Microsoft.OpenJDK` (instalador, pide UAC) o el zip portátil sin instalación `https://aka.ms/download-jdk/microsoft-jdk-21-windows-aarch64.zip` en `C:\Users\<usuario>\tools\`. Conviene un acceso directo "yEd (ARM64)" con ese comando. |
-| **SQL Server 2025 + SSMS 22** | ✅ funciona (x64 emulado) | El servicio `MSSQLSERVER` corre emulado y responde. `sqlcmd -S localhost -E -C -Q "SELECT @@VERSION"` devolvió `SQL Server 2025 (RTM) 17.0.1000.7 (X64)`. **Descarga el instalador en el idioma de Windows** (es-ES): el mismatch de idioma hace fallar el instalador. Hay drivers ODBC 18 **ARM64** nativos. |
-| **PyMuPDF** | ✅ funciona | `pip install pymupdf` instala la 1.28.2 con binario ARM64 (ya no hace falta compilarla). Renderizó el sílabo a PNG. |
-| **pypdfium2** | ✅ funciona | 5.15.2, binario ARM64. Renderizó el sílabo a PNG. |
-| **Pillow** | ✅ se instala | 13.0.0, binario ARM64. |
-| **Mermaid CLI** | ✅ funciona con Edge | No descargues Chrome (es x64). Usa Edge, que es ARM64 nativo: `PUPPETEER_SKIP_DOWNLOAD=1 npm i @mermaid-js/mermaid-cli`, más un `pptr.json` con `{"executablePath": "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"}` y `mmdc -p pptr.json -i x.mmd -o x.png`. Generó un DER con pata de gallo. **Solo si no se pidió yEd.** |
-| **Graphviz** | ⚠️ solo hay x64 | winget solo ofrece `Graphviz.Graphviz` win64 ("No applicable installer" para arm64). Debería correr emulado. |
-| **Windows-MCP** | ⚠️ sin verificar | Necesita Python 3.14 (uv lo baja para ARM64: `uv python install 3.14`). En la prueba, el sistema de permisos del agente bloqueó ejecutarlo, porque da control total del escritorio. Lo instala el estudiante con el comando del paso 2 y luego se verifica con `claude mcp list`. |
-| **uv** | ✅ se instala | `pip install uv` (0.13.8) con binario ARM64. |
+| **yEd 3.25.1** | ✅ con Java ARM64 | `yEd.exe` usa su `jre\` **x64** emulado y se cerraba (`RADAR_PRE_LEAK_64`). `scripts\env\install-yed-arm64.ps1` instala Microsoft OpenJDK 21 ARM64 (zip portátil, sin admin) en `~\tools\jdk-21-arm64` y crea accesos directos **"yEd (ARM64)"** que ejecutan `javaw -jar yed.jar`. Probado: la ventana se abre y queda estable. No uses el acceso directo original. |
+| **SQL Server 2025 + SSMS 22** | ✅ x64 emulado | El servicio corre emulado y responde a `sqlcmd`. Instalador: medio **en-US** (ver paso 3). Hay drivers ODBC 18 **ARM64** nativos. |
+| **PyMuPDF** | ✅ solo `==1.28.2` | `pip install "pymupdf==1.28.2"` (binario `cp310-abi3-win_arm64`). Sin versión, pip toma la 2.1 y falla al compilar. |
+| **pypdfium2** | ✅ | 5.15.2, binario ARM64. |
+| **Pillow, uv** | ✅ | Binarios ARM64 (`pip install pillow uv`). |
+| **Mermaid CLI** | ✅ con Edge | El Chrome que baja Puppeteer es x64; usa Edge (ARM64 nativo): `PUPPETEER_SKIP_DOWNLOAD=1 npm i @mermaid-js/mermaid-cli` y `mmdc -p pptr.json …` con `{"executablePath": "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"}`. **Solo si no se pidió yEd.** |
+| **Graphviz** | ⚠️ solo x64 | winget no tiene instalador arm64 de `Graphviz.Graphviz`; debería correr emulado. |
+| **Windows-MCP** | ⚠️ sin verificar | Necesita Python 3.14 (`uv python install 3.14` baja la versión ARM64). Pendiente probarlo en ARM64. |
 | **Java Access Bridge con yEd** | ⚠️ sin verificar | `jabswitch -enable` del JDK ARM64. |
 
-**Instalación permanente de yEd en ARM64 (hecha y probada en el PC del estudiante, sin permisos de administrador):**
-```powershell
-# 1. JDK ARM64 portátil en una carpeta del usuario
-curl.exe -L -o $env:TEMP\jdk.zip https://aka.ms/download-jdk/microsoft-jdk-21-windows-aarch64.zip
-Expand-Archive $env:TEMP\jdk.zip $env:TEMP\jdk; Move-Item (Get-ChildItem $env:TEMP\jdk -Directory)[0].FullName "$HOME\tools\jdk-21-arm64"
-# 2. Accesos directos "yEd (ARM64)" en el menú Inicio y el Escritorio
-$sh = New-Object -ComObject WScript.Shell
-foreach ($t in "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\yEd (ARM64).lnk", "$([Environment]::GetFolderPath('Desktop'))\yEd (ARM64).lnk") {
-  $l = $sh.CreateShortcut($t); $l.TargetPath = "$HOME\tools\jdk-21-arm64\bin\javaw.exe"
-  $l.Arguments = "-jar `"$HOME\yEd\yed.jar`""; $l.WorkingDirectory = "$HOME\yEd"; $l.IconLocation = "$HOME\yEd\yEd.exe,0"; $l.Save() }
-```
-Para abrir un archivo desde el agente: `& "$HOME\tools\jdk-21-arm64\bin\javaw.exe" -jar "$HOME\yEd\yed.jar" archivo.graphml`.
-El acceso directo original de yEd (con el Java x64) sigue existiendo: no lo uses en ARM64.
-
 Reglas en ARM64:
-- Antes de instalar algo, mira si existe la versión ARM64: `winget show --id <ID> --architecture arm64`. Si dice
-  "No applicable installer", solo hay x64 y correrá emulado.
-- En apps Java, el problema suele ser **el JRE x64 incluido**, no la app: prueba el `.jar` con un JDK ARM64.
-- Para automatizar el navegador, Edge es ARM64 nativo. El Chrome que descargan Puppeteer o Playwright es x64.
+- Antes de instalar algo, comprueba si hay versión ARM64: `winget show --id <ID> --architecture arm64`. "No
+  applicable installer" significa que solo hay x64, que correrá emulado.
+- En apps Java, el problema suele ser **el JRE x64 incluido**, no la app: ejecuta el `.jar` con un JDK ARM64.
+- Para automatizar el navegador, Edge es ARM64 nativo; el Chrome de Puppeteer o Playwright es x64.
+- Paquetes de Python: si pip intenta compilar, busca la última versión con binario `win_arm64`
+  (`pip download <pkg>==<versión> --only-binary=:all:`) y fíjala.

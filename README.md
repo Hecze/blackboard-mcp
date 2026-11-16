@@ -1,162 +1,130 @@
-# Blackboard MCP Server: Blackboard Learn for Claude, ChatGPT Codex and Cursor
+# blackboard-mcp (fork para Cibertec, Windows)
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-server-8A2BE2)](https://modelcontextprotocol.io)
-![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)
-[![M8ven Score](https://m8ven.ai/badge/mcp/mattlo0546-blackboard-mcp-w5zm3b?v=ca99a9aef024e25f665f1a7a0cea48a5)](https://m8ven.ai/mcp/mattlo0546-blackboard-mcp-w5zm3b?s=readme)
 
-**blackboard-mcp** is an open-source [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server for
-**Blackboard Learn** (Ultra). It lets AI assistants (Claude Desktop, Claude Code, ChatGPT Codex, Cursor, VS Code and
-[SlideMate](https://github.com/Mattlo0546/slidemate)) read a student's Blackboard courses, content, deadlines and
-announcements. It can also **download this year's lecture slides and readings** into one folder per course.
+Fork de [Mattlo0546/blackboard-mcp](https://github.com/Mattlo0546/blackboard-mcp) adaptado a un estudiante de
+**Cibertec** (`https://cibertec.blackboard.com`, Blackboard Ultra) en **Windows (x86_64 y ARM64)**. Da a un
+agente de IA acceso **de solo lectura** a todo lo del curso:
+- evaluaciones, su estado y sus archivos (rúbricas y enunciados);
+- el material completo del curso, los anuncios y los documentos de SharePoint;
+- las **clases grabadas** (Class / Zoom) como transcripciones que separan al profesor de los alumnos.
 
-- **Works at any university that uses Blackboard**, including Imperial College London, Edinburgh, Bristol, Leeds
-  and Southampton ([list](#universities-that-use-blackboard)). Set `BB_BASE_URL` to yours.
-- **No API key needed.** It uses Blackboard's REST API with your own browser session. You sign in through your
-  university's normal SSO and MFA in a real browser window.
-- **Read-only.** It can't submit work, post or change anything on Blackboard.
+Funciona con **cualquier cliente o harness** que hable MCP por stdio: Claude Code o Desktop, Codex, OpenCode,
+Cursor, VS Code… Si tu agente no usa MCP, cada herramienta también es una función de Python.
 
-> Using Canvas or Moodle instead? See [canvas-mcp](https://github.com/Mattlo0546/canvas-mcp) (Oxford, Harvard,
-> Stanford…) and [moodle-mcp](https://github.com/Mattlo0546/moodle-mcp) (UCL, King's, LSE, Cambridge…).
+> **Para agentes:** empieza por [`AGENTS.md`](AGENTS.md). Las skills están en [`skills/`](skills/).
 
-## What you can ask
+## Instalación (Windows)
 
-- *"What's due on Blackboard in the next three weeks?"*
-- *"Any new announcements in my courses?"*
-- *"Download this year's lecture slides."*
-
-## Install
-
-**With SlideMate:** Settings → **Your university** → pick your university (or Blackboard and your address) → **Connect**. SlideMate
-installs this, opens the sign-in window, and pulls your slides. Nothing else to do.
-
-**By hand (macOS, one command).** It installs [uv](https://docs.astral.sh/uv/) (which brings its own Python), then
-this, then opens Chrome so you can sign in once. Replace the address with your university's:
-
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh && ~/.local/bin/uv tool install --managed-python https://github.com/Mattlo0546/blackboard-mcp/archive/refs/heads/main.zip && BB_BASE_URL=https://www.ole.bris.ac.uk ~/.local/bin/blackboard-mcp login
+```powershell
+git clone https://github.com/Hecze/blackboard-mcp.git; cd blackboard-mcp
+python -m venv .venv
+.venv\Scripts\pip install --only-binary=:all: cryptography   # en ARM64, para no compilarla
+.venv\Scripts\pip install -e .
 ```
 
-Then add it to your MCP client with the same `BB_BASE_URL` in its environment:
-
-```bash
-claude mcp add blackboard -e BB_BASE_URL=https://www.ole.bris.ac.uk -- ~/.local/bin/blackboard-mcp serve
-```
-
-## Tools
-
-| Tool | What it does |
-| --- | --- |
-| `bb_login` | Opens a browser for the university sign-in and saves the session. Tries a silent refresh first. |
-| `bb_status` | Who you're signed in as, which site, where files download to, last sync |
-| `bb_courses` | This year's courses (`include_all` for every course and organisation) |
-| `bb_browse` | A course's content (or one folder's): titles, text, links, grade columns |
-| `bb_download` | Every file in one content item |
-| `bb_upcoming` | Due dates in the next N days (default 21) |
-| `bb_evaluations` | Every evaluation in a course (or all): due date, your status (pending / draft / submitted / graded / overdue), score, feedback, instructions and the teacher's attached files (rubrics) |
-| `bb_pull_course` | Downloads everything in a course keeping its folders: files, files inside evaluations, announcement attachments and scripts, SharePoint docs (syllabus, manuals); writes `manifest.json` |
-| `bb_recordings` | Recorded live lessons from Class (class.com, the Zoom/Teams classroom behind "Launch Class"): TEO/LAB rooms of a course, date, duration, status |
-| `bb_transcript` | Saves recordings as Markdown transcripts: 🎓 teacher vs 🙋 each student by name (Zoom speaker labels), timestamps and the class chat interleaved. Needs `class_web` in config |
-| `bb_announcements` | Recent announcements, for one course or all of this year's |
-| `bb_sync` / `bb_sync_status` | Download the PDFs from this year's courses (or the ones named), in the background |
-| `bb_set_courses` | Change which courses a full sync pulls (`include` an info site it skips, `exclude` a course) |
-
-**This year's courses:** students stay enrolled in years of old courses, so a sync only takes courses whose end date is
-still ahead, or (as Blackboard rarely sets end dates) that were created within about 9 months of your newest course.
-Files land in `<folder>/<course>/<Week NN or top-level folder>/`, and only new or changed ones are downloaded.
-
-**Only what you study:** a full sync skips sites that aren't courses (faculty hubs, guidance and induction sites,
-library skills) and, inside courses, posters, handbooks, forms, timetables and support pages. Its report lists the
-sites it skipped; `bb_set_courses` brings one back. Words that are also lecture topics only count in an admin phrase,
-so "Mathematical induction" stays and "Induction week schedule" goes ([`relevance.py`](blackboard_mcp/relevance.py)).
-
-## Connect it to your AI app
-
-### Claude Desktop
-
-Settings → Developer → Edit Config (`claude_desktop_config.json`):
-
+Configuración en `%USERPROFILE%\.blackboard-mcp\config.json`:
 ```json
 {
-  "mcpServers": {
-    "blackboard": {
-      "command": "/Users/YOU/.local/bin/blackboard-mcp",
-      "args": ["serve"],
-      "env": { "BB_BASE_URL": "https://bb.imperial.ac.uk" }
-    }
-  }
+  "base_url": "https://cibertec.blackboard.com",
+  "sso_button": "SAML Docentes y Estudiantes",
+  "class_web": "https://cibertec.class.com"
 }
 ```
+- `base_url`: la dirección de tu Blackboard.
+- `sso_button`: el texto del botón de inicio de sesión. Opcional.
+- `class_web`: el sitio de Class de tu institución, para las grabaciones. Opcional.
 
-The same block works in Cursor (`~/.cursor/mcp.json`). VS Code's `.vscode/mcp.json` uses `"servers"` in place of
-`"mcpServers"`.
+Las variables `BB_BASE_URL`, `BB_SSO_BUTTON` y `BB_CLASS_WEB` tienen prioridad sobre el archivo.
 
-### ChatGPT Codex CLI
-
-```bash
-codex mcp add blackboard --env BB_BASE_URL=https://bb.imperial.ac.uk -- ~/.local/bin/blackboard-mcp serve
+Inicio de sesión (una vez; **el estudiante escribe su contraseña en la ventana que se abre**, el agente nunca):
+```powershell
+.venv\Scripts\blackboard-mcp.exe login
+```
+Mantener la sesión viva (tarea programada cada 4 h, sin permisos de administrador):
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\install-keepalive.ps1
+```
+Comprobar todo:
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\env\doctor.ps1
 ```
 
-## Universities that use Blackboard
+## Registrar el servidor en tu cliente
 
-These addresses were checked to be Blackboard Learn sites:
+Es un servidor MCP **stdio**. El comando es `<repo>\.venv\Scripts\blackboard-mcp.exe` con el argumento `serve`.
+Usa la ruta absoluta y sigue la documentación de tu cliente:
 
-| University | `BB_BASE_URL` |
-| --- | --- |
-| Imperial College London | `bb.imperial.ac.uk` |
-| University of Edinburgh (Learn) | `www.learn.ed.ac.uk` |
-| University of Bristol | `www.ole.bris.ac.uk` |
-| University of Leeds (Minerva) | `minerva.leeds.ac.uk` |
-| University of Sheffield | `vle.shef.ac.uk` |
-| University of Southampton | `blackboard.soton.ac.uk` |
-| University of York (Yorkshare) | `vle.york.ac.uk` |
+| Cliente | Configuración |
+|---|---|
+| Claude Code | `claude mcp add --scope user blackboard -- C:\ruta\blackboard-mcp\.venv\Scripts\blackboard-mcp.exe serve` |
+| Claude Desktop, Cursor, VS Code y otros con `mcpServers` | `{"mcpServers": {"blackboard": {"command": "C:\\ruta\\blackboard-mcp\\.venv\\Scripts\\blackboard-mcp.exe", "args": ["serve"]}}}` |
+| OpenCode (`opencode.json`) | `{"mcp": {"blackboard": {"type": "local", "command": ["C:\\ruta\\blackboard-mcp\\.venv\\Scripts\\blackboard-mcp.exe", "serve"]}}}` |
+| Codex CLI (`~/.codex/config.toml`) | `[mcp_servers.blackboard]`, `command = 'C:\ruta\blackboard-mcp\.venv\Scripts\blackboard-mcp.exe'`, `args = ["serve"]` |
 
-Your university's address is the one in your browser's address bar when you open Blackboard. If its landing page has
-an unusual sign-in button, set `BB_SSO_BUTTON` to that button's text.
-
-## Settings (all optional except the address)
-
-Environment variables win over `~/.blackboard-mcp/config.json`.
-
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `BB_BASE_URL` | none | Your university's Blackboard address |
-| `BB_DOWNLOAD_DIR` | SlideMate's first slides folder, else `~/BlackboardFiles` | Where synced files go |
-| `BB_BROWSER_CHANNEL` | `chrome` | Browser for sign-in; `""` uses Playwright's own Chromium |
-| `BB_SSO_BUTTON` | a few common ones | Text of the button that starts single sign-on on your Blackboard's landing page |
-| `BB_MCP_HOME` | `~/.blackboard-mcp` | Where the session cookies, sign-in browser profile and sync state live |
-
-## FAQ
-
-**Is there an MCP server for Imperial's or Edinburgh's Blackboard?**
-Yes, this one. Set `BB_BASE_URL` to `bb.imperial.ac.uk` or `www.learn.ed.ac.uk`. In SlideMate, pick the university
-from the list.
-
-**Do I need a Blackboard API key or developer account?**
-No. It uses the same REST API the Blackboard website uses, with your own signed-in session.
-
-**Does it work with ChatGPT?**
-It works with OpenAI's Codex CLI and with any app that supports local (stdio) MCP servers. The ChatGPT website can
-only use remote MCP servers.
-
-## Privacy
-
-- **Access:** read-only. It can't submit work, post or change anything on Blackboard.
-- **Storage:** the session cookies stay on your computer (`~/.blackboard-mcp/cookies.json`, readable only by you).
-  Delete the folder to sign out. Data goes directly between your computer and your university's Blackboard.
-
-## Development
-
-```bash
-uv run --with pytest pytest     # offline tests: which courses count as this year's, file layout, MCP over stdio
+**Sin MCP**, desde Python:
+```powershell
+.venv\Scripts\python -c "import asyncio; from blackboard_mcp import server; print(asyncio.run(server.bb_evaluations('GDAT5373')))"
 ```
 
-## Related
+## Herramientas
 
-- [canvas-mcp](https://github.com/Mattlo0546/canvas-mcp): MCP server for Canvas LMS
-- [moodle-mcp](https://github.com/Mattlo0546/moodle-mcp): MCP server for Moodle
-- [classroom-mcp](https://github.com/Mattlo0546/classroom-mcp): MCP server for Google Classroom
-- [SlideMate](https://github.com/Mattlo0546/slidemate): a free Mac app with an AI tutor that has read your whole
-  lecture deck. It sets all of these up in one click.
+| Herramienta | Qué hace |
+|---|---|
+| `bb_login` / `bb_status` | Iniciar sesión (prueba primero renovarla en silencio) y ver la cuenta, la carpeta de descargas y el estado de la sesión |
+| `bb_courses` | Cursos actuales (`include_all` para todos) |
+| `bb_evaluations` | Todas las evaluaciones de un curso (o de todos): fecha límite, tu estado (pendiente / enviada / calificada / vencida), nota, comentario, instrucciones y **archivos del profesor**, incluido el enunciado de exámenes como la T1 |
+| `bb_download` | Baja los archivos de un elemento o evaluación |
+| `bb_pull_course` | Baja **todo** el curso con sus carpetas, más anuncios, documentos de SharePoint (sílabo, manuales) y un `manifest.json` |
+| `bb_browse` | Contenido de un curso o carpeta |
+| `bb_upcoming` | Próximas fechas de entrega |
+| `bb_announcements` | Anuncios recientes |
+| `bb_recordings` | Clases grabadas en Class (salas TEO y LAB) |
+| `bb_transcript` | Transcripciones en Markdown: **🎓 PROFESOR** vs **🙋 Alumno: nombre**, con el minuto y el chat de clase |
+| `bb_sync` / `bb_sync_status` / `bb_set_courses` | Sincronizar los PDF de los cursos (del proyecto original) |
 
-MIT licensed. Not affiliated with Anthology Inc. or any university. Blackboard is a trademark of Anthology Inc.
+Todo es **de solo lectura**: nunca entrega, guarda ni crea intentos en Blackboard.
+
+## Dónde quedan las cosas
+
+| Qué | Dónde |
+|---|---|
+| Descargas | `%USERPROFILE%\BlackboardFiles\<curso>\Todo\` (curso completo), `…\Downloads\`, `…\Grabaciones\` |
+| Sesión y configuración | `%USERPROFILE%\.blackboard-mcp\`: **privado**, nunca lo subas (`cookies.json`, `class.json`, `browser-profile\`) |
+| Apuntes y expedientes | `estudio\` en el repo (en `.gitignore`) |
+
+## Skills (instrucciones para agentes)
+
+Las fuentes están en [`skills/`](skills/): Markdown con frontmatter YAML, legibles por cualquier agente.
+`python scripts/sync_skills.py` las copia a las carpetas que algunos harnesses leen solos (`.claude/skills/`).
+
+- [`obtener-contexto-evaluacion`](skills/obtener-contexto-evaluacion/SKILL.md): reúne todo sobre una evaluación
+  (fecha real, reglas, enunciado, rúbrica, sílabo, material, anuncios, lo que dijo el profesor en clase) en un
+  expediente con fuentes.
+- [`preparar-entorno-escritorio`](skills/preparar-entorno-escritorio/SKILL.md): deja listo el PC para programas de
+  escritorio (SQL Server, SSMS, yEd, Word) con scripts de `scripts\env\` y MCP que ya existen. Incluye las notas
+  verificadas de ARM64.
+
+## Scripts
+
+| Script | Para qué |
+|---|---|
+| `scripts\env\probe.ps1 [-Json]` | Describe el PC (arquitectura real, idioma, lo instalado) |
+| `scripts\env\doctor.ps1` | Revisa todo y dice cómo arreglar lo que falta |
+| `scripts\env\install-sqlserver.ps1`, `install-ssms.ps1` | SQL Server y SSMS con winget (el estudiante aprueba UAC) |
+| `scripts\env\sql-login.ps1 -Status/-Grant/-Revoke` | Usar SQL Server sin elevación, o deshacerlo |
+| `scripts\env\install-yed-arm64.ps1` | yEd en ARM64 (JDK ARM64 + accesos directos) |
+| `scripts\pdf2png.py` | PDF a PNG |
+| `scripts\install-keepalive.ps1` | Tarea que renueva la sesión de Blackboard |
+| `scripts\sync_skills.py` | Copia `skills/` a las carpetas de cada harness |
+
+## Desarrollo
+
+```powershell
+.venv\Scripts\python -m pytest -q        # pruebas sin conexión
+python scripts/sync_skills.py --check    # las copias de las skills están al día
+```
+Licencia MIT. Basado en el trabajo de [Mattlo0546](https://github.com/Mattlo0546/blackboard-mcp), que lo publicó
+para universidades del Reino Unido (macOS y SlideMate). Este fork no está afiliado con Anthology, Blackboard,
+Class Technologies ni Cibertec.

@@ -181,3 +181,24 @@ def test_class_matches_blackboard_course():
                           {"class_uuid": "c", "class_name": "ANALISIS Y DISEÑO DE SOFTWARE _ Julianne (LA)"}]
     assert [c["class_uuid"] for c in cc.classes_for("GDAT5373 BASE DE DATOS")] == ["a", "b"]
     assert [c["class_uuid"] for c in cc.classes_for("DCGS5365 ANALISIS Y DISEÑO DE SOFTWARE")] == ["c"]
+
+
+REPO = Path(__file__).resolve().parent.parent
+
+
+def test_skills_mirrors_in_sync_and_frontmatter_valid():
+    import re
+    r = subprocess.run([sys.executable, str(REPO / "scripts" / "sync_skills.py"), "--check"], capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout
+    for f in (REPO / "skills").glob("*/SKILL.md"):
+        head = re.match(r"---\n(.*?)\n---\n", f.read_text(encoding="utf-8"), re.S).group(1)
+        assert re.search(rf"^name: {re.escape(f.parent.name)}$", head, re.M), f
+        # descriptions contain ': ' — they must be block scalars or YAML breaks (GitHub showed an error)
+        assert re.search(r"^description: >-\n  \S", head, re.M), f
+
+
+def test_docs_have_no_control_characters():
+    files = [REPO / "AGENTS.md", REPO / "README.md", *(REPO / "skills").rglob("*.md"), *(REPO / "scripts").rglob("*.ps1")]
+    for f in files:
+        bad = [c for c in f.read_text(encoding="utf-8-sig") if ord(c) < 32 and c not in "\n\r\t"]
+        assert not bad, f"{f.name} has control characters (a mangled backslash?)"

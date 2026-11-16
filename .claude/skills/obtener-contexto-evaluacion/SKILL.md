@@ -14,8 +14,10 @@ Entrada: `<evaluación> <curso>`, por ejemplo `T1 base de datos` o `examen final
 Salida: `estudio/<CÓDIGO>-<evaluación>/` en este repo (la carpeta `estudio/` está en `.gitignore`: nunca va al
 fork público). Contiene `EXPEDIENTE.md` y los informes por clase.
 
-Las herramientas `bb_*` son del MCP de este repo (servidor `blackboard`). Si no están cargadas, búscalas con
-ToolSearch ("blackboard"). Habla con el estudiante en español.
+Las herramientas `bb_*` son del servidor MCP de este repo (`blackboard`; cómo registrarlo en cualquier cliente:
+`README.md`). Si tu harness no tiene MCP, cada herramienta es una función async de `blackboard_mcp/server.py` que
+puedes llamar desde Python (`asyncio.run(server.bb_evaluations("GDAT5373"))`, con `.venv\Scripts\python`).
+Habla con el estudiante en español.
 
 ---
 
@@ -101,8 +103,9 @@ El sílabo es la versión oficial, **no la última palabra**: el profesor la aju
 2. `bb_transcript(course)` → guarda las transcripciones que falten. Cada línea sale como **🎓 PROFESOR** o
    **🙋 Alumno: nombre**, con `[hh:mm:ss]` de la grabación y el chat (💬) intercalado. Viene de Zoom, así que es
    buena pero automática: corrige por contexto ("Edgar Lean" = Edgar Codd, "Mag Size" = MAXSIZE).
-3. Lanza **un subagente por transcripción, en paralelo**. Cada clase dura unas 4 h (90–170 KB). Que la lea
-   **entera** en partes y guarde su informe en `estudio/<CÓDIGO>-<evaluación>/clases/<fecha>-<TEO|LAB>.md` con:
+3. Analiza **cada transcripción por separado**: un subagente por clase, en paralelo, si tu harness los tiene; si
+   no, una tras otra. Cada clase dura unas 4 h (90–170 KB): léela **entera**, en partes, y guarda el informe en
+   `estudio/<CÓDIGO>-<evaluación>/clases/<fecha>-<TEO|LAB>.md` con:
    - los temas en orden, con marcas de tiempo, y **el último tema visto**;
    - definiciones y criterios **con las palabras del profesor** (qué exige, qué corrige, qué no acepta, su
      notación y su estilo de código);

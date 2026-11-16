@@ -29,21 +29,40 @@ When it happens:
 
 When starting work in this repo, glance at `session-health.json` first and apply the above if it isn't ok.
 
+## Start here (any agent / harness)
+
+1. `powershell -ExecutionPolicy Bypass -File scripts\env\doctor.ps1` — checks the Blackboard session, SQL Server,
+   yEd, PDF tools and desktop automation, and prints the fix for anything missing (`scripts\env\probe.ps1 -Json`
+   gives the raw machine facts: real CPU architecture, Windows language, installed programs).
+2. The Blackboard tools are an MCP stdio server (`.venv\Scripts\blackboard-mcp.exe serve`; how to register it in each
+   client: `README.md`). Without MCP, call them from Python: `asyncio.run(blackboard_mcp.server.bb_<tool>(...))`.
+3. Skills (task playbooks) live in **`skills/<name>/SKILL.md`** — plain Markdown, read them directly if your harness
+   doesn't load skills. `.claude/skills/` is a generated mirror: edit `skills/`, then `python scripts/sync_skills.py`.
+
 ## Working on an evaluation (T1, T2, final exam, project…)
 
-Gather its full context with the project skill **`obtener-contexto-evaluacion`**
-([.claude/skills/obtener-contexto-evaluacion/SKILL.md](.claude/skills/obtener-contexto-evaluacion/SKILL.md)): it finds the evaluation,
-its files and settings, pulls the whole course (`bb_pull_course`), reads the syllabus, transcribes and analyses every
-recorded class (`bb_recordings`/`bb_transcript`, one subagent per class), checks announcements, settles the scope and
-writes a sourced dossier in `estudio/<CODE>-<evaluation>/EXPEDIENTE.md`. Then do whatever the user asked with it,
-respecting the teacher's rules recorded there (e.g. AI forbidden in that evaluation).
+Follow **[`skills/obtener-contexto-evaluacion/SKILL.md`](skills/obtener-contexto-evaluacion/SKILL.md)**: it finds the
+evaluation, its files (including exam statements) and settings, pulls the whole course (`bb_pull_course`), reads the
+syllabus, transcribes and analyses every recorded class (`bb_recordings`/`bb_transcript`, one class at a time or in
+parallel), checks announcements, settles the scope and writes a sourced dossier in
+`estudio/<CODE>-<evaluation>/EXPEDIENTE.md`. Then do whatever the user asked with it, respecting the teacher's rules
+recorded there (e.g. AI forbidden in that evaluation). Never submit, save or start attempts in Blackboard.
 
 ## Desktop apps and documents (SQL Server/SSMS, yEd, Word…)
 
-Before driving desktop programs or editing .docx, set the machine up with the project skill
-**`preparar-entorno-escritorio`** ([.claude/skills/preparar-entorno-escritorio/SKILL.md](.claude/skills/preparar-entorno-escritorio/SKILL.md)):
-existing MCPs (Windows-MCP via UI Automation, a Word MCP), winget installs the student approves, headless diagram/PDF
-rendering. Never hand-roll SendKeys/coordinate clicks or a persistent admin broker. Windows x86_64 and ARM64 (verified ARM64 notes at the end of the skill).
+Follow **[`skills/preparar-entorno-escritorio/SKILL.md`](skills/preparar-entorno-escritorio/SKILL.md)** and its scripts in
+`scripts\env\`. Use the tool the user asked for (yEd means yEd, not a substitute). Never hand-roll SendKeys,
+coordinate clicks or a persistent admin broker; anything that needs UAC is run by the student. Windows x86_64 and
+ARM64 (verified ARM64 notes at the end of the skill; on ARM64 yEd runs via the "yEd (ARM64)" shortcut / native JDK).
+
+### SQL Server without elevation (privilege left on this machine)
+
+To let agents use `sqlcmd`/`pyodbc` as the student's Windows user, a SQL login was created for that user:
+`hecze-laptop\hecto` is **sysadmin** on the local `MSSQLSERVER` (created by an earlier agent session, Nov 2026).
+- Check: `scripts\env\sql-login.ps1 -Status`
+- Narrower alternative: `scripts\env\sql-login.ps1 -Grant -Role dbcreator` (elevated)
+- Cleanup when no longer needed: `scripts\env\sql-login.ps1 -Revoke` (elevated)
+Record any new lasting privilege like this here.
 
 ## How the session stays alive
 
