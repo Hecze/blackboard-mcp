@@ -202,10 +202,10 @@ Expand-Archive $env:TEMP\jdk.zip $env:TEMP\jdk; Move-Item (Get-ChildItem $env:TE
 # 2. Accesos directos "yEd (ARM64)" en el menú Inicio y el Escritorio
 $sh = New-Object -ComObject WScript.Shell
 foreach ($t in "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\yEd (ARM64).lnk", "$([Environment]::GetFolderPath('Desktop'))\yEd (ARM64).lnk") {
-  $l = $sh.CreateShortcut($t); $l.TargetPath = "$HOME\tools\jdk-21-arm64bin\javaw.exe"
+  $l = $sh.CreateShortcut($t); $l.TargetPath = "$HOME\tools\jdk-21-arm64\bin\javaw.exe"
   $l.Arguments = "-jar `"$HOME\yEd\yed.jar`""; $l.WorkingDirectory = "$HOME\yEd"; $l.IconLocation = "$HOME\yEd\yEd.exe,0"; $l.Save() }
 ```
-Para abrir un archivo desde el agente: `& "$HOME\tools\jdk-21-arm64bin\javaw.exe" -jar "$HOME\yEd\yed.jar" archivo.graphml`.
+Para abrir un archivo desde el agente: `& "$HOME\tools\jdk-21-arm64\bin\javaw.exe" -jar "$HOME\yEd\yed.jar" archivo.graphml`.
 El acceso directo original de yEd (con el Java x64) sigue existiendo: no lo uses en ARM64.
 
 Reglas en ARM64:
