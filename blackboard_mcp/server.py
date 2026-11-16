@@ -218,6 +218,20 @@ async def bb_announcements(course: str | None = None, days: int = 14) -> dict:
     return await _run(go)
 
 
+@mcp.tool()
+async def bb_pull_course(course: str) -> dict:
+    """Download EVERYTHING in one course into <download folder>/<course>/Todo/, keeping Blackboard's folders:
+    all files (slides, guides, SQL, xlsx…), files inside evaluations (rubrics, statements), files and class
+    scripts posted in announcements (Todo/ANUNCIOS) and SharePoint documents such as the syllabus and manuals.
+    Writes Todo/manifest.json, an index of every item. Files already downloaded are skipped. Takes a minute or two."""
+    from .pull import pull_course
+
+    def go():
+        bb = _bb()
+        return pull_course(_settings, bb, bb.find_course(course))
+    return await _run(go)
+
+
 def _class_client():
     from .classcom import ClassClient
     if not _settings.class_web:

@@ -105,7 +105,7 @@ def test_stdio_lists_tools_and_keeps_stdout_clean():
         p.stdin.write(json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}) + "\n")
         names = {t["name"] for t in rpc(2, "tools/list")["result"]["tools"]}
         assert {"bb_login", "bb_sync", "bb_sync_status", "bb_upcoming", "bb_announcements", "bb_set_courses",
-                "bb_evaluations", "bb_recordings", "bb_transcript"} <= names
+                "bb_evaluations", "bb_recordings", "bb_transcript", "bb_pull_course"} <= names
     finally:
         p.kill()
 

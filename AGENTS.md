@@ -29,6 +29,13 @@ When it happens:
 
 When starting work in this repo, glance at `session-health.json` first and apply the above if it isn't ok.
 
+## Preparing for an evaluation
+
+When the student asks to prepare for an exam/assignment, follow **[docs/PREPARAR-EVALUACION.md](docs/PREPARAR-EVALUACION.md)**
+step by step (find it → its files → `bb_pull_course` → syllabus → `bb_recordings`/`bb_transcript` with one subagent per
+class → announcements → scope → AI-use rules → study guide in `estudio/`). If the teacher forbids AI in that evaluation,
+only help prepare: never solve it or review its answers before submission.
+
 ## How the session stays alive
 
 - Sign-in uses a dedicated Chrome profile at `~/.blackboard-mcp/browser-profile` (Microsoft "stay signed in").
@@ -53,4 +60,4 @@ When starting work in this repo, glance at `session-health.json` first and apply
 - Teachers also post class scripts and diagrams in **announcements** — check them, not only course content.
 - Main tools: `bb_evaluations` (each evaluation's due date, the student's status, score, feedback,
   instructions and the teacher's attached files such as rubrics), `bb_upcoming`, `bb_browse`,
-  `bb_download`, `bb_announcements`, `bb_sync`.
+  `bb_download`, `bb_pull_course` (whole course incl. announcements and SharePoint docs), `bb_announcements`, `bb_sync`.
