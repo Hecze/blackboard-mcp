@@ -1,6 +1,7 @@
 ---
 name: preparar-entorno-escritorio
-description: Deja listo un PC Windows x86_64 para que un agente trabaje con aplicaciones de escritorio de los cursos (SQL Server + SSMS, yEd, Word/.docx, diagramas, PDF) usando herramientas que ya existen — MCP de automatización de Windows por árbol de accesibilidad, MCP de Word, renderizado de diagramas y PDF sin interfaz — en vez de scripts hechos a mano (SendKeys, clics por coordenadas, brokers con permisos de administrador). Úsala antes de cualquier tarea que necesite manejar programas de escritorio o editar documentos.
+description: >-
+  Deja listo un PC Windows x86_64 para que un agente trabaje con aplicaciones de escritorio de los cursos (SQL Server + SSMS, yEd, Word/.docx, diagramas, PDF) usando herramientas que ya existen — MCP de automatización de Windows por árbol de accesibilidad, MCP de Word, renderizado de diagramas y PDF sin interfaz — en vez de scripts hechos a mano (SendKeys, clics por coordenadas, brokers con permisos de administrador). Úsala antes de cualquier tarea que necesite manejar programas de escritorio o editar documentos.
 ---
 
 # preparar-entorno-escritorio

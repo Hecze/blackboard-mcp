@@ -1,6 +1,7 @@
 ---
 name: obtener-contexto-evaluacion
-description: Reúne TODO lo que existe sobre una evaluación de un curso de Cibertec en Blackboard (T1, T2, examen final, entregable, proyecto…) — fecha real, reglas, intentos, rúbrica, enunciado, sílabo, material del curso, anuncios y lo que el profesor dijo en cada clase grabada — y lo deja en un expediente con fuentes citadas. Úsala cuando haya que trabajar sobre una evaluación concreta, sea cual sea el fin (estudiar, practicar, entender una nota, revisar lo aprendido). Argumentos: evaluación y curso, p. ej. "T1 base de datos".
+description: >-
+  Reúne TODO lo que existe sobre una evaluación de un curso de Cibertec en Blackboard (T1, T2, examen final, entregable, proyecto…) — fecha real, reglas, intentos, rúbrica, enunciado, sílabo, material del curso, anuncios y lo que el profesor dijo en cada clase grabada — y lo deja en un expediente con fuentes citadas. Úsala cuando haya que trabajar sobre una evaluación concreta, sea cual sea el fin (estudiar, practicar, entender una nota, revisar lo aprendido). Argumentos: evaluación y curso, p. ej. "T1 base de datos".
 ---
 
 # obtener-contexto-evaluacion
