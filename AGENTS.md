@@ -43,7 +43,7 @@ respecting the teacher's rules recorded there (e.g. AI forbidden in that evaluat
 Before driving desktop programs or editing .docx, set the machine up with the project skill
 **`preparar-entorno-escritorio`** ([.claude/skills/preparar-entorno-escritorio/SKILL.md](.claude/skills/preparar-entorno-escritorio/SKILL.md)):
 existing MCPs (Windows-MCP via UI Automation, a Word MCP), winget installs the student approves, headless diagram/PDF
-rendering. Never hand-roll SendKeys/coordinate clicks or a persistent admin broker. Target: Windows x86_64 (ARM64 later).
+rendering. Never hand-roll SendKeys/coordinate clicks or a persistent admin broker. Windows x86_64 and ARM64 (verified ARM64 notes at the end of the skill).
 
 ## How the session stays alive
 

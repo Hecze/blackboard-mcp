@@ -1,13 +1,13 @@
 ---
 name: preparar-entorno-escritorio
 description: >-
-  Deja listo un PC Windows x86_64 para que un agente trabaje con aplicaciones de escritorio de los cursos (SQL Server + SSMS, yEd, Word/.docx, diagramas, PDF) usando herramientas que ya existen — MCP de automatización de Windows por árbol de accesibilidad, MCP de Word, renderizado de diagramas y PDF sin interfaz — en vez de scripts hechos a mano (SendKeys, clics por coordenadas, brokers con permisos de administrador). Úsala antes de cualquier tarea que necesite manejar programas de escritorio o editar documentos.
+  Deja listo un PC Windows (x86_64 o ARM64) para que un agente trabaje con aplicaciones de escritorio de los cursos (SQL Server + SSMS, yEd, Word/.docx, diagramas, PDF) usando herramientas que ya existen — MCP de automatización de Windows por árbol de accesibilidad, MCP de Word, renderizado de diagramas y PDF sin interfaz — en vez de scripts hechos a mano (SendKeys, clics por coordenadas, brokers con permisos de administrador). Úsala antes de cualquier tarea que necesite manejar programas de escritorio o editar documentos.
 ---
 
 # preparar-entorno-escritorio
 
 Guía para **obtener e instalar** las herramientas que un agente necesita para trabajar con programas de
-escritorio en Windows. Plataforma objetivo: **Windows 10/11 x86_64**. ARM64 queda para después (ver al final).
+escritorio en Windows. Plataforma: **Windows 10/11 x86_64**, y **ARM64** con las particularidades verificadas al final.
 
 Nace de un intento real en el que el agente lo armó todo a mano: SendKeys que acabaron escribiendo en otra
 ventana, clics por coordenadas fallidos, capturas con offset, un broker de administrador hecho en casa e
@@ -29,6 +29,16 @@ Habla con el estudiante en español. **Instalar software y conceder permisos sie
   telemetría.
 - En Blackboard la IA **nunca envía, guarda ni crea intentos** (ver `obtener-contexto-evaluacion`), y respeta las
   reglas del profesor sobre uso de IA en cada evaluación.
+
+## 0.1 Fidelidad a la herramienta pedida
+
+- **Si el usuario o el curso piden una herramienta concreta (yEd, SSMS, Word…), se usa esa herramienta.** No se
+  sustituye por "algo parecido" (Mermaid o Graphviz en lugar de yEd, LibreOffice en lugar de Word, un script en
+  lugar de SSMS) aunque sea más fácil de automatizar.
+- Esta guía documenta **todas las formas conocidas** de hacer funcionar y automatizar cada herramienta. Si ninguna
+  funciona, se dice claramente qué falla y se pregunta al usuario. No se cambia de herramienta por iniciativa
+  propia.
+- Las herramientas "sin interfaz" del paso 5 son para cuando **no** se pidió una herramienta concreta.
 
 ## 1. Sondeo del entorno (antes de elegir camino)
 
@@ -69,8 +79,8 @@ Cómo usarlo bien:
 - **Primero `Snapshot`** (el árbol de la ventana) y después **clic por nombre**. Las coordenadas solo como último
   recurso.
 - Usa **`WaitFor`** en lugar de esperas fijas (`Start-Sleep`).
-- Las apps **Java/Swing (como yEd)** casi no exponen UI Automation. Para ellas, evita la interfaz: genera el
-  archivo (`.graphml`) y renderízalo sin interfaz (paso 5).
+- Las apps **Java/Swing (como yEd)** casi no exponen UI Automation. Para ellas, ver el paso 5.1 (yEd): atajos de
+  teclado dirigidos a la ventana, Java Access Bridge, o editar el `.graphml` y abrirlo en yEd.
 
 Alternativas, si Windows-MCP no encaja (sin verificar a fondo):
 - [felenko/WindowsOSMCP](https://github.com/felenko/WindowsOSMCP): `click_element` por nombre o ID;
@@ -120,15 +130,36 @@ Por orden de preferencia (MCP de terceros: revisa el estado del repositorio ante
 - PDF → PNG por página: paso 5;
 - alternativa comercial con render directo a PNG: Aspose.Words MCP (requiere licencia).
 
-## 5. Diagramas y PDF sin interfaz
+## 5. Diagramas y PDF
+
+### 5.1 yEd (cuando se pide yEd, que es lo que usa el curso de Base de Datos)
+
+Instalación: `winget search yEd` o el instalador de yWorks. Queda en `C:\Users\<usuario>\yEd\` con `yEd.exe`,
+`yed.jar` y un Java propio en `jre\`.
+
+Todas las formas de trabajar con yEd:
+1. **Interfaz de yEd** (lo que hace el estudiante): dibujar y luego *File → Export* a PNG, JPG o SVG.
+2. **Generar o editar el `.graphml`** (XML) con código y **abrirlo en yEd**: `yEd.exe archivo.graphml` o
+   `java -jar yed.jar archivo.graphml`. Con *Layout* se reordena y luego se exporta desde yEd. El `.graphml`
+   también es lo que suele entregarse. Los del profesor están en `Todo\ANUNCIOS\*.graphml` y sirven de plantilla
+   para el estilo (formas, pata de gallo).
+3. **Automatizar la interfaz de yEd**: es Swing, así que UI Automation no ve sus controles. Opciones:
+   - **atajos de teclado** dirigidos a la ventana de yEd (Windows-MCP `Shortcut`/`Type` con la ventana enfocada y
+     el título verificado), sin clics a ciegas;
+   - **Java Access Bridge**: `jabswitch -enable` (viene con el JDK) expone los controles Swing a las herramientas
+     de accesibilidad. Bibliotecas que lo usan desde Python: `pyjab`, `JABWrapper`. **Sin verificar con yEd.**
+   - Capturas con `Snapshot`/`Screenshot` de Windows-MCP para comprobar cada paso.
+4. yEd **no** tiene exportación por línea de comandos. No inventes una.
+
+### 5.2 Otras herramientas de diagramas (solo si no se pidió una concreta)
 
 - **Graphviz** (`winget search Graphviz`): `dot -Tpng diagrama.dot -o diagrama.png`.
 - **Mermaid CLI**: `npm install -g @mermaid-js/mermaid-cli`, luego `mmdc -i diagrama.mmd -o diagrama.png`.
-- **yEd / .graphml**: yEd no tiene render por línea de comandos. Genera el `.graphml` (XML) para entregar o editar
-  en yEd y, para la imagen, convierte el mismo grafo a DOT o Mermaid. Si el curso exige el estilo de yEd (DER con
-  rombos y pata de gallo), el estudiante exporta desde yEd.
-- **PDF → PNG**: en x86_64, **PyMuPDF** (`pip install pymupdf`; `page.get_pixmap(dpi=150).save(...)`) o
-  `pypdfium2`.
+
+### 5.3 PDF → imagen
+
+- **PyMuPDF**: `pip install pymupdf`, luego `pymupdf.open(p)[0].get_pixmap(dpi=150).save(...)`.
+- **pypdfium2**: `pip install pypdfium2`, luego `pdfium.PdfDocument(p)[0].render(scale=2).to_pil().save(...)`.
 
 ## 6. Capturas
 
@@ -145,7 +176,26 @@ Por orden de preferencia (MCP de terceros: revisa el estado del repositorio ante
 - [ ] Sesión de Windows dedicada al agente.
 - [ ] Nada corre con permisos de administrador permanentes.
 
-## ARM64 (pendiente)
+## ARM64 (Windows on ARM)
 
-Ya se vio que en ARM64 yEd 3.25.1 se cae, PyMuPDF no tiene versión para ARM64 (falla la compilación) y SQL Server
-x64 funciona bajo emulación. Cuando toque, se agregará aquí una sección con alternativas verificadas.
+Probado el 16/11/2026 en Windows 11 Home ARM64 (26200), con Windows en español. ✅ = verificado en ese PC,
+⚠️ = sin verificar.
+
+| Herramienta | Estado en ARM64 | Cómo |
+|---|---|---|
+| **yEd 3.25.1** | ✅ funciona **con Java ARM64** | `yEd.exe` usa su `jre\` **x64** emulado, y por eso se cerraba (`RADAR_PRE_LEAK_64`). Hay que lanzar `yed.jar` con un JDK **ARM64 nativo**: `"<jdk-arm64>\bin\java.exe" -jar C:\Users\<usuario>\yEd\yed.jar [archivo.graphml]`. Probado con Microsoft OpenJDK 21.0.13 aarch64: abrió la ventana "yEd" y siguió estable. JDK: `winget search Microsoft.OpenJDK` (instalador, pide UAC) o el zip portátil sin instalación `https://aka.ms/download-jdk/microsoft-jdk-21-windows-aarch64.zip` en `C:\Users\<usuario>\tools\`. Conviene un acceso directo "yEd (ARM64)" con ese comando. |
+| **SQL Server 2025 + SSMS 22** | ✅ funciona (x64 emulado) | El servicio `MSSQLSERVER` corre emulado y responde. `sqlcmd -S localhost -E -C -Q "SELECT @@VERSION"` devolvió `SQL Server 2025 (RTM) 17.0.1000.7 (X64)`. **Descarga el instalador en el idioma de Windows** (es-ES): el mismatch de idioma hace fallar el instalador. Hay drivers ODBC 18 **ARM64** nativos. |
+| **PyMuPDF** | ✅ funciona | `pip install pymupdf` instala la 1.28.2 con binario ARM64 (ya no hace falta compilarla). Renderizó el sílabo a PNG. |
+| **pypdfium2** | ✅ funciona | 5.15.2, binario ARM64. Renderizó el sílabo a PNG. |
+| **Pillow** | ✅ se instala | 13.0.0, binario ARM64. |
+| **Mermaid CLI** | ✅ funciona con Edge | No descargues Chrome (es x64). Usa Edge, que es ARM64 nativo: `PUPPETEER_SKIP_DOWNLOAD=1 npm i @mermaid-js/mermaid-cli`, más un `pptr.json` con `{"executablePath": "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"}` y `mmdc -p pptr.json -i x.mmd -o x.png`. Generó un DER con pata de gallo. **Solo si no se pidió yEd.** |
+| **Graphviz** | ⚠️ solo hay x64 | winget solo ofrece `Graphviz.Graphviz` win64 ("No applicable installer" para arm64). Debería correr emulado. |
+| **Windows-MCP** | ⚠️ sin verificar | Necesita Python 3.14 (uv lo baja para ARM64: `uv python install 3.14`). En la prueba, el sistema de permisos del agente bloqueó ejecutarlo, porque da control total del escritorio. Lo instala el estudiante con el comando del paso 2 y luego se verifica con `claude mcp list`. |
+| **uv** | ✅ se instala | `pip install uv` (0.13.8) con binario ARM64. |
+| **Java Access Bridge con yEd** | ⚠️ sin verificar | `jabswitch -enable` del JDK ARM64. |
+
+Reglas en ARM64:
+- Antes de instalar algo, mira si existe la versión ARM64: `winget show --id <ID> --architecture arm64`. Si dice
+  "No applicable installer", solo hay x64 y correrá emulado.
+- En apps Java, el problema suele ser **el JRE x64 incluido**, no la app: prueba el `.jar` con un JDK ARM64.
+- Para automatizar el navegador, Edge es ARM64 nativo. El Chrome que descargan Puppeteer o Playwright es x64.
