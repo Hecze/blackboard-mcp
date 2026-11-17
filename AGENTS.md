@@ -161,6 +161,15 @@ Y estas son de operación:
   seguro — es lo que permite reiniciar tras corregir el código.
 - **"Guardar y cerrar" y "Enviar" siguen deshabilitados hasta responder todo**, y el contador «N DE 10 PREGUNTAS
   RESTANTES» se actualiza en el siguiente render, no al instante: no son fallos, no hay que insistir.
+- **El botón del pie queda tapado por el modal de confirmación**: al enviar sale «¿Desea enviar el examen?» con un
+  `div.modal-backdrop` encima, así que el clic al botón del pie expira. Hay que pulsar el **Enviar del modal** (es el
+  último del DOM): por eso `bb_enviar` se llama dos veces, una por cada uno.
+- **Ultra pinta la pregunta en diferido**: recién navegado, el snapshot puede venir sin pregunta (sólo «Página 1 de
+  10»). `abrir()` espera hasta 6 s a que exista un campo; si aun así sale vacío, `bb_ver` a los segundos.
+- **Cada `abrir` navega la pestaña actual**, no abre otra: si el agente cambia de cuestionario, el intento anterior se
+  queda sin pestaña (el borrador sigue en Blackboard). Para volver: "Continuar intento".
+- **Enviar**: `bb_clic` se niega con «Enviar» siempre; `bb_enviar` existe para cuando el alumno lo autoriza
+  explícitamente en la conversación. El envío deja el intento calificado en segundos.
 - **PS 5.1 `Set-Content -Encoding utf8` escribe BOM** y `json.loads` revienta con BOM: al pasar JSON entre procesos
   usar `[IO.File]::WriteAllText(..., UTF8Encoding($false))` o leer con `utf-8-sig`.
 

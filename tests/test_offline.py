@@ -1,4 +1,4 @@
-"""Offline tests: `uv run --with pytest pytest`. No Blackboard account or network needed."""
+﻿"""Offline tests: `uv run --with pytest pytest`. No Blackboard account or network needed."""
 import json
 import os
 import subprocess
@@ -355,7 +355,7 @@ def test_blackboard_mcp_exposes_the_navigator_tools():
     from blackboard_mcp import server
     names = {t.name for t in asyncio.run(server.mcp.list_tools())}
     assert {"bb_navegar", "bb_ver", "bb_clic", "bb_rellenar", "bb_elegir", "bb_marcar", "bb_tecla", "bb_atras",
-            "bb_captura", "bb_cerrar_navegador"} <= names
+            "bb_captura", "bb_cerrar_navegador", "bb_enviar"} <= names
 
 
 def test_course_labels_unique_for_repeated_courses():
@@ -365,3 +365,4 @@ def test_course_labels_unique_for_repeated_courses():
     c = Course(id="_3", course_id="X", name="MATE5491 MATEMATICA II", code="MATE5491")
     lab = course_labels([a, b, c])
     assert lab["_3"] == "MATE5491 MATEMATICA II" and lab["_1"] != lab["_2"] and "202610202612" in lab["_1"]
+

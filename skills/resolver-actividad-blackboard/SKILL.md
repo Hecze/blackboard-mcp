@@ -42,11 +42,13 @@ intentes iniciar sesión ahí ni pidas la contraseña.
 - Un cuestionario con varias preguntas por página: responde las de la página, pulsa **Siguiente**, repite.
 - Antes de pasar de página, repasa que cada pregunta de esa página tenga respuesta marcada.
 
-## Regla dura: nunca envíes
+## Regla dura: nunca envíes (salvo permiso explícito)
 
-- **Nunca** pulses "Enviar", "Enviar intento", "Entregar", "Guardar y enviar" ni "Finalizar intento". `bb_clic` se
-  niega (devuelve `bloqueado: true`); si lo ves, es correcto: no busques la forma de saltarlo.
-- El cierre es del alumno: revisa, decide y pulsa Enviar.
+- **Nunca** pulses "Enviar", "Enviar intento", "Entregar", "Guardar y enviar" ni "Finalizar intento" con `bb_clic`:
+  se niega (devuelve `bloqueado: true`); si lo ves, es correcto: no busques la forma de saltarlo.
+- El cierre es del alumno: revisa, decide y pulsa Enviar. **Salvo que lo autorice explícitamente en la conversación**
+  («envíalos tú»): entonces usa `bb_enviar(ref)`, que pulsa el botón de envío y luego su confirmación
+  («¿Desea enviar el examen?»). Son dos llamadas: la primera abre el modal, la segunda lo confirma.
 - Sí puedes pulsar "Guardar" / "Guardar borrador" (no envía) y "Siguiente".
 
 ## Barreras conocidas (ya resueltas: no las redescubras)

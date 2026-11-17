@@ -458,6 +458,14 @@ async def bb_atras() -> dict:
 
 
 @tool
+async def bb_enviar(ref: str) -> dict:
+    """SUBMIT the activity: press the "Enviar"/"Submit" button with that `ref`. Use it ONLY when the student has
+    explicitly authorised submitting in this conversation (e.g. "envíalos tú"). Otherwise stop before "Enviar" and
+    let the student press it. `bb_clic` still refuses these buttons on purpose."""
+    return await _run(lambda: _navegador().enviar(ref))
+
+
+@tool
 async def bb_captura() -> dict:
     """Save a screenshot of the current page and return its path (show it to the student when you stop)."""
     return await _run(lambda: _navegador().captura())

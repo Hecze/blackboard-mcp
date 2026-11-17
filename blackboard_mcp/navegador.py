@@ -313,6 +313,12 @@ class Navegador:
                 page.wait_for_load_state("networkidle", timeout=15000)
             except Exception:
                 pass
+            # Ultra pinta la pregunta en diferido: sin esto el snapshot llega vacío y parece que no hay nada
+            try:
+                page.wait_for_selector("input[type=radio], input[type=checkbox], textarea, select, input[type=text]",
+                                       timeout=6000)
+            except Exception:
+                pass
             self._guardar_cookies()
             return self._snapshot(page)
         return self._do(go)
@@ -355,6 +361,7 @@ class Navegador:
             texto = self._texto_de(frame, sel)
             if ENVIAR.match(texto or ""):
                 return {"bloqueado": True, "boton": texto, "message": NO_ENVIA}
+            antes = len([p for p in self._ctx.pages if not p.is_closed()])
             try:
                 frame.click(sel, timeout=8000)
             except Exception:
@@ -368,13 +375,13 @@ class Navegador:
             except Exception:
                 page.wait_for_timeout(800)
             self._guardar_cookies()
-            # si el botón abre otra pestaña (el intento del cuestionario), hay que quedarse con ella: el popup
-            # puede tardar un par de segundos en aparecer
+            # si el botón abre otra pestaña (el intento del cuestionario), hay que quedarse con la NUEVA: ojo,
+            # ya puede haber varias abiertas, así que se compara con las que había antes del clic
             try:
                 page.wait_for_timeout(400)
                 for _ in range(20):
                     hijos = [p for p in self._ctx.pages if not p.is_closed()]
-                    if len(hijos) > 1:
+                    if len(hijos) > antes:
                         self._page = hijos[-1]
                         try:
                             self._page.wait_for_load_state("domcontentloaded", timeout=15000)
@@ -441,6 +448,33 @@ class Navegador:
             except Exception:
                 pass
             return self._snapshot(page)
+        return self._do(go)
+
+    def enviar(self, ref: str) -> dict:
+        """Pulsa el botón de ENVIAR. Solo con autorización explícita del alumno en la conversación.
+
+        `bb_clic` se niega siempre con los botones de envío; esto es la puerta aparte para cuando el alumno dice
+        «envíalos» y no hace falta que revise uno por uno."""
+        def go(pw):
+            page = self._slots(pw, self._visible)
+            frame, sel = self._resolver(ref)
+            texto = self._texto_de(frame, sel)
+            if not ENVIAR.match(texto or ""):
+                return {"error": f"«{texto}» no es un botón de envío: usa bb_clic"}
+            antes = len([p for p in self._ctx.pages if not p.is_closed()])
+            frame.click(sel, timeout=15000)
+            page.wait_for_timeout(2500)
+            try:
+                page.wait_for_load_state("networkidle", timeout=10000)
+            except Exception:
+                pass
+            hijos = [p for p in self._ctx.pages if not p.is_closed()]
+            if len(hijos) > antes:
+                self._page = hijos[-1]
+            self._guardar_cookies()
+            snap = self._snapshot(self._page)
+            snap["enviado"] = True
+            return snap
         return self._do(go)
 
     def captura(self) -> dict:
