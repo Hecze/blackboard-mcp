@@ -95,10 +95,19 @@ function InputHas([string]$text) {
 try {
     Log "url=$Url"
 
+    # --- avisar al vigía (blackboard_mcp/alarms.py) qué botón se pulsó: así sabe cuándo enseñar la siguiente alarma.
+    # Va lo primero, antes de la UI: el vigía mira este archivo mientras la notificación está en pantalla.
+    $md = @{}
+    if ($Url -match '[?&]data=([^&]+)') { $md = [uri]::UnescapeDataString($Matches[1]) | ConvertFrom-Json }
+    $act = if ($Url -match '^bbexam://entendido') { 'entendido' } else { 'opencode' }
+    if ($md.tag) {
+        @{ tag = $md.tag; action = $act; at = (Get-Date).ToString('o') } | ConvertTo-Json -Compress |
+            Set-Content -Path (Join-Path $env:TEMP 'bbexam-boton.json') -Encoding utf8
+        Log "boton: $act ($($md.tag))"
+    }
+
     # --- botón "Entendido (no insistir)": marca la actividad como silenciada y no vuelve a sonar
     if ($Url -match '^bbexam://entendido') {
-        $md = @{}
-        if ($Url -match '[?&]data=([^&]+)') { $md = [uri]::UnescapeDataString($Matches[1]) | ConvertFrom-Json }
         $key = $md.key
         if (-not $key) { throw "Sin key para silenciar" }
         $file = Join-Path $HOME '.blackboard-mcp\alarms.json'

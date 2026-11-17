@@ -1,24 +1,29 @@
-"""Exam alarms: a native Windows alarm notification that keeps coming back until Blackboard shows the exam submitted.
+"""Alarmas de evaluaciones: una notificación nativa de Windows que insiste hasta que Blackboard muestre la entrega hecha.
 
-Only "big" evaluations (T1, T2, T3…, sustitutorio, examen final / parcial…) by default — not quizzes or attendance.
-The notification uses Windows' *alarm* scenario (stays on screen, looping alarm sound, like the Clock app) and has two
-buttons:
+Suena con **cualquier** entrega pendiente con fecha. T1/T2/T3/EF/sustitutorio/parcial/final insisten hasta que aparezcan
+enviadas; el resto avisa una sola vez. Van **de una en una**: se muestra la más urgente y, al cerrarla, aparece la
+siguiente — así no se apilan tres notificaciones cuando hay varias pendientes.
 
-- **Hacer con OpenCode** (left): opens Blackboard's project in OpenCode with the exam already prompted — a new session
-  in the repo, with the "get the dossier, then solve it" message sent automatically. Implemented with the `bbexam://`
-  protocol registered in HKCU (scripts/abrir-examen-opencode.ps1 uses the local OpenCode API).
-- **Posponer** (right): 2 h, or less so the last ring lands at least 1 h before the deadline; in that last hour it
-  rings every 15 min. There is no "off": it stops only when the evaluation is submitted or graded in Blackboard.
+La notificación usa el escenario *alarma* de Windows (se queda en pantalla con sonido en bucle, como la app Reloj) y
+tiene dos botones:
 
-Run by a scheduled task every 15 min (scripts/install-alarms.ps1):  blackboard-mcp alarms
-Try it without Blackboard:                                          blackboard-mcp alarms --demo
+- **Hacer con OpenCode** (izquierda): abre una pestaña nueva de OpenCode con el prompt ya escrito, sin enviar
+  (`bbexam://abrir` → scripts/abrir-examen-opencode.ps1). La siguiente alarma espera **10 min**: estás ocupado.
+- **Posponer 1 h** (T1/T2/EF…) o **Entendido (no insistir)** (el resto): la siguiente aparece **al instante**.
+- Cerrar con la **X** cuenta como posponer: vuelve a sonar en 1 h, y la siguiente también aparece al instante.
+
+Se ejecuta cada 15 min (scripts/install-alarms.ps1):  blackboard-mcp alarms
+Probarlo sin Blackboard:                            blackboard-mcp alarms --demo
 """
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
+import tempfile
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import quote
@@ -33,6 +38,9 @@ OPEN = ("pending", "draft")            # still to hand in (overdue can't be subm
 SNOOZE = timedelta(hours=1)            # cerrar con la X (o posponer) = volver a sonar en 1 h
 MARGIN = timedelta(hours=1)            # …shortened so the last ring is at least this long before the deadline
 LAST_HOUR_EVERY = timedelta(minutes=15)
+OPENCODE_PAUSE = timedelta(minutes=10)  # tras "Hacer con OpenCode": la siguiente puede esperar, estás resolviendo
+WAIT_MAX = timedelta(hours=4)          # si nadie toca la notificación, la tanda termina (y la siguiente vuelve a sonar)
+MARKER = Path(tempfile.gettempdir()) / "bbexam-boton.json"   # lo escribe el handler del protocolo al pulsar un botón
 AUMID = "Blackboard.Alarmas"           # app id the notifications are shown under (registered in HKCU, no admin)
 APP_NAME = "Alarmas de exámenes"
 PROTOCOL = "bbexam"                    # bbexam://abrir?data=<json> → scripts/abrir-examen-opencode.ps1
@@ -125,6 +133,11 @@ def course_title(label: str) -> str:
     return " ".join(w.lower() if i and w.lower() in small else w.capitalize() for i, w in enumerate(name.split()))
 
 
+def toast_tag(key: str) -> str:
+    """Windows tag: same tag replaces the older notification instead of stacking; only [A-Za-z0-9_] and ≤ 64 chars."""
+    return re.sub(r"[^A-Za-z0-9_]", "_", key or "")[:60]
+
+
 def exam_arg(alarm: dict) -> str:
     """`bbexam://abrir?data=<json>` for the "Hacer con OpenCode" button: what the PowerShell handler needs.
 
@@ -135,7 +148,8 @@ def exam_arg(alarm: dict) -> str:
     data = {"title": alarm.get("title") or "", "course": alarm.get("course") or "",
             "due": alarm["due"].isoformat() if alarm.get("due") else "",
             "mode": "repo" if alarm.get("big") else "blackboard",
-            "url": alarm.get("url") or "", "key": alarm.get("key") or ""}
+            "url": alarm.get("url") or "", "key": alarm.get("key") or "",
+            "tag": toast_tag(alarm.get("key") or "")}
     return f"{PROTOCOL}://abrir?data={quote(json.dumps(data, ensure_ascii=False))}"
 
 
@@ -144,7 +158,8 @@ def mute_arg(alarm: dict) -> str:
 
     Va por protocolo (no `activationType="system"`) porque Windows no distingue ese botón de cerrar la notificación
     con la X: así sabemos que el alumno lo pulsó y lo silenciamos de verdad."""
-    data = {"key": alarm.get("key") or "", "title": alarm.get("title") or ""}
+    data = {"key": alarm.get("key") or "", "title": alarm.get("title") or "",
+            "tag": toast_tag(alarm.get("key") or "")}
     return f"{PROTOCOL}://entendido?data={quote(json.dumps(data, ensure_ascii=False))}"
 
 
@@ -204,52 +219,148 @@ $x.LoadXml($in.xml)
 $t = [Windows.UI.Notifications.ToastNotification]::new($x)
 $t.Tag = $in.tag; $t.Group = 'alarmas'
 [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($in.app).Show($t)
+if (-not $in.wait) { Write-Output 'shown'; exit 0 }
+
+# Espera a que el alumno haga algo. PowerShell no puede suscribirse a eventos de WinRT (Register-ObjectEvent no
+# funciona con Windows Runtime), así que se vigila de dos formas:
+#   - el botón de protocolo (bbexam://) escribe $in.marker con {tag, action}: es la señal fiable de "lo pulsó";
+#   - si la notificación desaparece del centro de actividades, la cerró con la X o con "Posponer".
+$app = $in.app; $tag = $in.tag; $marker = $in.marker
+$deadline = (Get-Date).AddSeconds([int]$in.timeout)
+$res = 'timeout'
+function Marker($path) {
+    if (-not (Test-Path $path)) { return $null }
+    try { return (Get-Content $path -Raw -Encoding utf8 | ConvertFrom-Json) } catch { return $null }
+}
+while ((Get-Date) -lt $deadline) {
+    $m = Marker $marker
+    if ($m -and $m.tag -eq $tag) { $res = "$($m.action)"; break }
+    $seen = $false
+    try {
+        foreach ($n in [Windows.UI.Notifications.ToastNotificationManager]::History.GetHistory($app)) {
+            if ($n.Tag -eq $tag) { $seen = $true }
+        }
+    } catch { }
+    if (-not $seen) {
+        Start-Sleep -Milliseconds 1500          # margen: el handler del protocolo escribe la marca antes
+        $m = Marker $marker
+        if ($m -and $m.tag -eq $tag) { $res = "$($m.action)" } else { $res = 'dismissed' }
+        break
+    }
+    Start-Sleep -Milliseconds 750
+}
+try { [Windows.UI.Notifications.ToastNotificationManager]::History.Remove($tag, 'alarmas', $app) } catch { }
+Write-Output $res
 """
 
 
-def show_toast(xml: str, tag: str) -> None:
-    """Show a toast through Windows PowerShell's WinRT bridge (no extra Python packages; works on x64 and ARM64).
-    The same tag replaces an older notification for the same exam instead of stacking a new one."""
-    register_app()
-    payload = json.dumps({"xml": xml, "tag": re.sub(r"[^A-Za-z0-9_]", "_", tag)[:60], "app": AUMID})
+def _run_ps(script: str, payload: str | None = None, timeout: float = 60, env: dict | None = None) -> str:
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    r = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", _PS],
-                       input=payload, capture_output=True, text=True, encoding="utf-8", creationflags=flags, timeout=60)
+    r = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+                        "-Command", script], input=payload, capture_output=True, text=True, encoding="utf-8",
+                       creationflags=flags, timeout=timeout, env=env)
     if r.returncode:
-        raise RuntimeError(f"toast failed: {r.stderr.strip()[:400]}")
+        raise RuntimeError(f"toast failed: {(r.stderr or '').strip()[:400]}")
+    return (r.stdout or "").strip()
 
 
-def ring(alarm: dict) -> timedelta:
-    """Show the alarm; return when it should ring again (cerrar con la X también cuenta)."""
+def show_toast(xml: str, tag: str, wait: bool = False, timeout: timedelta = WAIT_MAX) -> str:
+    """Show a toast through Windows PowerShell's WinRT bridge (no extra Python packages; works on x64 and ARM64).
+
+    With `wait=True` it blocks until the student does something and returns what: `opencode` (pulsó el botón de la
+    izquierda), `entendido` (silenciar), `dismissed` (X o Posponer) o `timeout` (nadie la tocó en `timeout`)."""
+    register_app()
+    payload = json.dumps({"xml": xml, "tag": toast_tag(tag), "app": AUMID, "wait": bool(wait),
+                          "marker": str(MARKER), "timeout": int(timeout.total_seconds())})
+    out = _run_ps(_PS, payload, timeout=timeout.total_seconds() + 120 if wait else 60).splitlines()
+    result = out[-1].strip().lower() if out else "shown"
+    return result if result in ("dismissed", "opencode", "entendido", "timeout", "shown") else "shown"
+
+
+def clear_toasts() -> None:
+    """Quita de la pantalla y del centro de actividades las alarmas anteriores: una sola a la vez."""
+    register_app()
+    _run_ps(r"""
+[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
+try { [Windows.UI.Notifications.ToastNotificationManager]::History.Clear($env:BB_APP) } catch { }
+""", env={**os.environ, "BB_APP": AUMID})
+
+
+def ring(alarm: dict) -> str:
+    """Show ONE alarm and wait for the student; return `opencode` / `entendido` / `dismissed` / `timeout`."""
+    try:
+        MARKER.unlink()
+    except OSError:
+        pass
     big = alarm.get("big", True)
     snooze = snooze_for(alarm["left"])
-    show_toast(toast_xml(alarm["title"], course_title(alarm["course"]), alarm["left"], snooze,
-                         open_arg=exam_arg(alarm), big=big, mute=None if big else mute_arg(alarm)), alarm["key"])
-    return snooze
+    xml = toast_xml(alarm["title"], course_title(alarm["course"]), alarm["left"], snooze,
+                    open_arg=exam_arg(alarm), big=big, mute=None if big else mute_arg(alarm))
+    return show_toast(xml, alarm["key"], wait=True)
 
 
-def run(settings: Settings, bb, now: datetime | None = None, notify=ring) -> list[dict]:
-    """One check: ring every due alarm and remember what happens next.
+def ring_queue(rang: list[dict], show=ring, sleep=time.sleep, pause: timedelta = OPENCODE_PAUSE) -> list[str]:
+    """One at a time, most urgent first. After `opencode` the next one waits `pause`; otherwise it comes right away."""
+    outcomes = []
+    for i, a in enumerate(rang):
+        outcome = show(a)
+        outcomes.append(outcome)
+        if outcome == "opencode" and i < len(rang) - 1:
+            sleep(pause.total_seconds())
+    return outcomes
+
+
+def tanda_lock(settings: Settings):
+    """One run at a time: the scheduled task fires every 15 min and a run can sit waiting for the student for hours."""
+    f = open(settings.home / "alarms.lock", "a+b")
+    try:
+        if sys.platform == "win32":
+            import msvcrt
+            f.seek(0)
+            msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+        return f
+    except OSError:
+        f.close()
+        return None
+
+
+def run(settings: Settings, bb, now: datetime | None = None, show=ring, sleep=time.sleep) -> list[dict]:
+    """One check: ring the pending alarms one after another and remember what happens next.
 
     T1/T2/EF… (`big`): snooze, and ring again until Blackboard shows it submitted.
-    Anything else: rings once and is marked `muted` (one "Entendido" and it never comes back)."""
+    Anything else: rings once (one "Entendido" and it never comes back)."""
     from .bb import course_labels
     from .sync import Syncer
     now = now or datetime.now(timezone.utc)
-    courses = Syncer(settings, bb).courses()
-    labels = course_labels(courses)
-    by_course = {labels[c.id]: bb.evaluations(c) for c in courses}
-    state = load_state(settings)
-    rang = due_alarms(by_course, now, state, days=settings.alarm_days,
-                      include=settings.alarm_include or DEFAULT_INCLUDE, exclude=settings.alarm_exclude or DEFAULT_EXCLUDE)
-    for a in rang:
-        snooze = notify(a)
-        # cerrar con la X (o posponer) → vuelve a sonar; las no-examen se silencian solo con su botón (protocolo mute)
-        state[a["key"]] = {"title": a["title"], "course": a["course"],
-                           "snoozed_until": (now + snooze).isoformat()}
-    if rang:
-        save_state(settings, state)
-    return rang
+    lock = tanda_lock(settings)
+    if lock is None:
+        return []                                   # ya hay una tanda enseñando alarmas
+    try:
+        courses = Syncer(settings, bb).courses()
+        labels = course_labels(courses)
+        by_course = {labels[c.id]: bb.evaluations(c) for c in courses}
+        state = load_state(settings)
+        rang = due_alarms(by_course, now, state, days=settings.alarm_days,
+                          include=settings.alarm_include or DEFAULT_INCLUDE,
+                          exclude=settings.alarm_exclude or DEFAULT_EXCLUDE)
+        if not rang:
+            return []
+        clear_toasts()
+
+        def show_and_remember(a: dict) -> str:
+            outcome = show(a)
+            # cerrar con la X (o posponer) vuelve a sonar en 1 h; las no-examen se silencian con su propio botón
+            left = a["due"] - datetime.now(timezone.utc)
+            state[a["key"]] = {"title": a["title"], "course": a["course"],
+                               "snoozed_until": (datetime.now(timezone.utc) + snooze_for(left)).isoformat()}
+            save_state(settings, state)
+            a["outcome"] = outcome
+            return outcome
+
+        ring_queue(rang, show_and_remember, sleep=sleep)
+        return rang
+    finally:
+        lock.close()
 
 
 def session_lost() -> None:

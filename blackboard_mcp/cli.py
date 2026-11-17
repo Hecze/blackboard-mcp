@@ -12,9 +12,9 @@ def _alarms(demo: bool) -> int:
 
     from . import alarms
     if demo:
-        snooze = alarms.ring({"key": "demo", "title": "Examen T1 (demo)", "course": "GDAT5373 BASE DE DATOS",
-                              "left": timedelta(hours=15, minutes=20)})
-        print(f"alarma mostrada; volvería a sonar en {alarms.human_span(snooze)}")
+        outcome = alarms.ring({"key": "demo", "title": "Examen T1 (demo)", "course": "GDAT5373 BASE DE DATOS",
+                               "left": timedelta(hours=15, minutes=20)})
+        print(f"alarma mostrada; el alumno pulsó: {outcome}")
         return 0
     from .auth import LoginRequired
     from .bb import Blackboard

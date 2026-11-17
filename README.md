@@ -39,8 +39,16 @@ Configuración en `%USERPROFILE%\.blackboard-mcp\config.json`:
 Las variables `BB_BASE_URL`, `BB_SSO_BUTTON` y `BB_CLASS_WEB` tienen prioridad sobre el archivo.
 
 Alarmas de exámenes (opcional, mismo archivo): `"alarm_days": 7` (cuántos días antes empiezan a sonar),
-`"alarm_include"` y `"alarm_exclude"` (expresiones regulares sobre el título; por defecto suenan T1/T2/T3, EF,
-examen, sustitutorio, parcial y final, y no los cuestionarios ni la asistencia). Suena con **cualquier actividad pendiente con fecha** (exámenes, cuestionarios, simulaciones, entregables, tareas). Es una **notificación de alarma nativa de Windows** (se queda en pantalla, sonido de alarma en bucle) con dos botones: **Hacer con OpenCode** (abre una pestaña nueva y deja el prompt escrito en el input, sin enviarlo: tú decides cuándo darle Enter) y el segundo botón, que depende del tipo: en **T1/T2/T3/EF/sustitutorio/parcial/final** dice **Posponer 2 h** y vuelve a sonar (2 h, o menos para que el último aviso llegue al menos 1 h antes del vencimiento; en esa última hora cada 15 min) hasta que Blackboard lo marque enviado; en **cualquier otra actividad** dice **Entendido (no insistir)** y no vuelve a molestar.
+`"alarm_include"` y `"alarm_exclude"` (expresiones regulares sobre el título; solo deciden qué cuenta como "examen"):
+suena con **cualquier actividad pendiente con fecha** (exámenes, cuestionarios, simulaciones, entregables, tareas).
+Es una **notificación de alarma nativa de Windows** (se queda en pantalla, sonido de alarma en bucle) y van **de una en
+una**: primero la más urgente, y al cerrarla entra la siguiente (así no se apilan tres cuando hay varias pendientes).
+Botones: **Hacer con OpenCode** (abre una pestaña nueva y deja el prompt escrito en el input, sin enviarlo: tú decides
+cuándo darle Enter; la siguiente alarma espera 10 min) y el segundo, que depende del tipo: en
+**T1/T2/T3/EF/sustitutorio/parcial/final** dice **Posponer 1 h** y vuelve a sonar (1 h, o menos para que el último aviso
+llegue al menos 1 h antes del vencimiento; en esa última hora cada 15 min) hasta que Blackboard lo marque enviado; en
+**cualquier otra actividad** dice **Entendido (no insistir)** y no vuelve a molestar. Cerrar con la **X** es posponer:
+vuelve a sonar en 1 h. En los dos últimos casos la siguiente alarma entra **al instante**.
 
 Inicio de sesión (una vez; **el estudiante escribe su contraseña en la ventana que se abre**, el agente nunca):
 ```powershell

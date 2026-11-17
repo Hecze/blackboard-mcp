@@ -291,6 +291,39 @@ def test_alarms_ring_for_any_submission_but_only_big_ones_insist():
     z2 = toast_xml("Cuestionario Tema 3", "X", timedelta(hours=15), timedelta(hours=1), big=False)
     assert "Posponer 1 h" in z2 and z2.count("<action ") == 1
     assert "%22mode%22%3A%20%22repo%22" in arg     # T1 sigue yendo por el repo
+    # el payload lleva el tag de la notificación: el handler lo usa para decirle al vigía qué botón se pulsó
+    assert "%22tag%22%3A%20%22col_123%22" in small_arg and "%22tag%22%3A%20%22col_123%22" in marg
+
+
+def test_alarms_are_shown_one_at_a_time():
+    """Una sola notificación a la vez: la siguiente aparece al instante (X/Posponer/Entendido) o a los 10 min
+    después de "Hacer con OpenCode"."""
+    from blackboard_mcp.alarms import OPENCODE_PAUSE, ring_queue, toast_tag
+    assert toast_tag("_4032653_1") == "_4032653_1"                  # el tag real de Blackboard se conserva
+    assert toast_tag("a b/c·d") == "a_b_c_d" and len(toast_tag("x" * 200)) == 60
+
+    queue_ = [{"title": "A"}, {"title": "B"}, {"title": "C"}]
+
+    def player(outcomes):
+        pending, shown = list(outcomes), []
+
+        def show(a):
+            shown.append(a["title"])
+            return pending.pop(0)
+        return show, shown
+
+    # X, Posponer o Entendido → la siguiente entra al instante, sin esperas
+    show, shown = player(["dismissed", "entendido", "dismissed"])
+    slept = []
+    assert ring_queue(queue_, show, sleep=slept.append) == ["dismissed", "entendido", "dismissed"]
+    assert shown == ["A", "B", "C"] and slept == []
+
+    # "Hacer con OpenCode" → 10 min antes de la siguiente (y no espera después de la última)
+    show, shown = player(["opencode", "dismissed", "opencode"])
+    slept = []
+    assert ring_queue(queue_, show, sleep=slept.append) == ["opencode", "dismissed", "opencode"]
+    assert slept == [OPENCODE_PAUSE.total_seconds()] == [600]
+    assert OPENCODE_PAUSE.total_seconds() == 600
 
 
 

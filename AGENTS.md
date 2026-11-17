@@ -100,6 +100,14 @@ Record any new lasting privilege like this here.
   repo) and `blackboard` for every other activity (it is a form/quiz inside Blackboard: fill it page by page and
   **stop before "Enviar"** so the student verifies and submits). The protocol is registered in HKCU by
   `alarms.register_app()`; nothing to install.
+  Alarms go **one at a time**, most urgent first (`alarms.ring_queue`), so several pending activities never stack up.
+  The hand-over needs to know which button was pressed, and PowerShell cannot subscribe to WinRT events
+  (`Register-ObjectEvent` refuses Windows Runtime objects): `show_toast(..., wait=True)` instead polls
+  `ToastNotificationManager.History.GetHistory()` (the toast disappears when the student closes it with the X or
+  "Posponer") and the marker file `%TEMP%\bbexam-boton.json`, which the protocol handler writes **before** touching the
+  UI. Outcome: `opencode` → the next alarm waits `OPENCODE_PAUSE` (10 min, the student is busy); `dismissed` /
+  `entendido` → next one right away; `timeout` (`WAIT_MAX`, 4 h) → the run ends. `alarms.lock` (msvcrt) keeps a single
+  run in charge: the scheduled task fires every 15 min and a run can sit waiting for hours.
   Keep that script saved as **UTF-8 with BOM** — PowerShell 5.1 reads it as ANSI otherwise and the prompt comes out
   with `Â«` and `rÃºbrica`. `-DryRun` prints the prompt without touching the app.
 
