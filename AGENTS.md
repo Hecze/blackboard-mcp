@@ -89,6 +89,9 @@ Record any new lasting privilege like this here.
 - Exam alarms: scheduled task **"Blackboard alarmas"** (`scripts/install-alarms.ps1`) runs `blackboard-mcp alarms`
   every 15 min; snoozes are stored in `~/.blackboard-mcp/alarms.json`. An alarm only stops when Blackboard shows the
   evaluation submitted/graded — never mark it done or edit that file to silence it.
+  The alarm has two buttons: **Hacer con OpenCode** (left; `bbexam://` → `scripts/abrir-examen-opencode.ps1`, which
+  creates a session in this repo through the local OpenCode API and sends the "dossier + solve it" prompt) and
+  **Posponer** (right). The protocol is registered in HKCU by `alarms.register_app()`; nothing to install.
 
 ## Working on the code
 

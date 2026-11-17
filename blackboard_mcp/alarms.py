@@ -1,9 +1,14 @@
 """Exam alarms: a native Windows alarm notification that keeps coming back until Blackboard shows the exam submitted.
 
 Only "big" evaluations (T1, T2, T3…, sustitutorio, examen final / parcial…) by default — not quizzes or attendance.
-The notification uses Windows' *alarm* scenario (stays on screen, looping alarm sound, like the Clock app) and has a
-single button, "Posponer": 2 h, or less so the last ring lands at least 1 h before the deadline; in that last hour it
-rings every 15 min. There is no "off": it stops only when the evaluation is submitted or graded in Blackboard.
+The notification uses Windows' *alarm* scenario (stays on screen, looping alarm sound, like the Clock app) and has two
+buttons:
+
+- **Hacer con OpenCode** (left): opens Blackboard's project in OpenCode with the exam already prompted — a new session
+  in the repo, with the "get the dossier, then solve it" message sent automatically. Implemented with the `bbexam://`
+  protocol registered in HKCU (scripts/abrir-examen-opencode.ps1 uses the local OpenCode API).
+- **Posponer** (right): 2 h, or less so the last ring lands at least 1 h before the deadline; in that last hour it
+  rings every 15 min. There is no "off": it stops only when the evaluation is submitted or graded in Blackboard.
 
 Run by a scheduled task every 15 min (scripts/install-alarms.ps1):  blackboard-mcp alarms
 Try it without Blackboard:                                          blackboard-mcp alarms --demo
@@ -16,7 +21,8 @@ import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from xml.sax.saxutils import escape
+from urllib.parse import quote
+from xml.sax.saxutils import escape, quoteattr
 
 from .bb import parse_dt
 from .config import Settings
@@ -29,6 +35,10 @@ MARGIN = timedelta(hours=1)            # …shortened so the last ring is at lea
 LAST_HOUR_EVERY = timedelta(minutes=15)
 AUMID = "Blackboard.Alarmas"           # app id the notifications are shown under (registered in HKCU, no admin)
 APP_NAME = "Alarmas de exámenes"
+PROTOCOL = "bbexam"                    # bbexam://abrir?data=<json> → scripts/abrir-examen-opencode.ps1
+OPENCODE_BUTTON = "Hacer con OpenCode"
+OPENCODE_SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "abrir-examen-opencode.ps1"
+
 
 
 def state_path(s: Settings) -> Path:
@@ -103,7 +113,20 @@ def course_title(label: str) -> str:
     return " ".join(w.lower() if i and w.lower() in small else w.capitalize() for i, w in enumerate(name.split()))
 
 
-def toast_xml(title: str, course: str, left: timedelta, snooze: timedelta) -> str:
+def exam_arg(alarm: dict) -> str:
+    """`bbexam://abrir?data=<json>` for the "Hacer con OpenCode" button: what the PowerShell handler needs."""
+    data = {"title": alarm.get("title") or "", "course": alarm.get("course") or "",
+            "due": alarm["due"].isoformat() if alarm.get("due") else ""}
+    return f"{PROTOCOL}://abrir?data={quote(json.dumps(data, ensure_ascii=False))}"
+
+
+def toast_xml(title: str, course: str, left: timedelta, snooze: timedelta, open_arg: str | None = None) -> str:
+    # Two buttons, left to right in the order declared: OpenCode first, snooze second.
+    actions = ""
+    if open_arg:
+        actions += (f'<action activationType="protocol" arguments={quoteattr(open_arg)} '
+                    f'content="{escape(OPENCODE_BUTTON)}"/>')
+    actions += f'<action activationType="system" arguments="dismiss" content="Posponer {escape(human_span(snooze))}"/>'
     return (
         '<toast scenario="alarm" duration="long">'
         '<visual><binding template="ToastGeneric">'
@@ -111,18 +134,28 @@ def toast_xml(title: str, course: str, left: timedelta, snooze: timedelta) -> st
         f'<text>{escape(title)} · {escape(course)}</text><text>Quedan {escape(human_left(left))}</text>'
         '</binding></visual>'
         '<audio src="ms-winsoundevent:Notification.Looping.Alarm" loop="true"/>'
-        f'<actions><action activationType="system" arguments="dismiss" content="Posponer {escape(human_span(snooze))}"/></actions>'
+        f'<actions>{actions}</actions>'
         '</toast>')
 
 
+
 def register_app() -> None:
-    """Show notifications as "Alarmas de exámenes" (HKCU AppUserModelId registration; no admin, no shortcut)."""
+    """Show notifications as "Alarmas de exámenes" and register `bbexam://` for the OpenCode button (HKCU, no admin)."""
     if sys.platform != "win32":
         return
     import winreg
     with winreg.CreateKey(winreg.HKEY_CURRENT_USER, rf"Software\Classes\AppUserModelId\{AUMID}") as k:
         winreg.SetValueEx(k, "DisplayName", 0, winreg.REG_SZ, APP_NAME)
         winreg.SetValueEx(k, "ShowInSettings", 0, winreg.REG_DWORD, 1)
+    if not OPENCODE_SCRIPT.exists():
+        return
+    cmd = f'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{OPENCODE_SCRIPT}" "%1"'
+    with winreg.CreateKey(winreg.HKEY_CURRENT_USER, rf"Software\Classes\{PROTOCOL}") as k:
+        winreg.SetValueEx(k, "", 0, winreg.REG_SZ, f"URL:{APP_NAME}")
+        winreg.SetValueEx(k, "URL Protocol", 0, winreg.REG_SZ, "")
+    with winreg.CreateKey(winreg.HKEY_CURRENT_USER, rf"Software\Classes\{PROTOCOL}\shell\open\command") as k:
+        winreg.SetValueEx(k, "", 0, winreg.REG_SZ, cmd)
+
 
 
 _PS = r"""
@@ -153,7 +186,8 @@ def show_toast(xml: str, tag: str) -> None:
 def ring(alarm: dict) -> timedelta:
     """Show the alarm; return how long it is snoozed for (the next ring)."""
     snooze = snooze_for(alarm["left"])
-    show_toast(toast_xml(alarm["title"], course_title(alarm["course"]), alarm["left"], snooze), alarm["key"])
+    show_toast(toast_xml(alarm["title"], course_title(alarm["course"]), alarm["left"], snooze,
+                         open_arg=exam_arg(alarm)), alarm["key"])
     return snooze
 
 

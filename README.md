@@ -1,4 +1,4 @@
-# blackboard-mcp (fork para Cibertec, Windows)
+﻿# blackboard-mcp (fork para Cibertec, Windows)
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-server-8A2BE2)](https://modelcontextprotocol.io)
@@ -40,7 +40,7 @@ Las variables `BB_BASE_URL`, `BB_SSO_BUTTON` y `BB_CLASS_WEB` tienen prioridad s
 
 Alarmas de exámenes (opcional, mismo archivo): `"alarm_days": 7` (cuántos días antes empiezan a sonar),
 `"alarm_include"` y `"alarm_exclude"` (expresiones regulares sobre el título; por defecto suenan T1/T2/T3, EF,
-examen, sustitutorio, parcial y final, y no los cuestionarios ni la asistencia). Es una **notificación de alarma nativa de Windows** (se queda en pantalla, sonido de alarma en bucle) con un solo botón: posponer 2 h, o menos para que el último aviso llegue al menos 1 h antes del vencimiento; en esa última hora suena cada 15 min.
+examen, sustitutorio, parcial y final, y no los cuestionarios ni la asistencia). Es una **notificación de alarma nativa de Windows** (se queda en pantalla, sonido de alarma en bucle) con dos botones: **Hacer con OpenCode** (crea una sesión en el repo de blackboard y le manda el prompt del examen: expediente + resolución) y **Posponer** (2 h, o menos para que el último aviso llegue al menos 1 h antes del vencimiento; en esa última hora suena cada 15 min).
 
 Inicio de sesión (una vez; **el estudiante escribe su contraseña en la ventana que se abre**, el agente nunca):
 ```powershell
