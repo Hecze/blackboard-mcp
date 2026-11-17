@@ -94,6 +94,28 @@ function InputHas([string]$text) {
 
 try {
     Log "url=$Url"
+
+    # --- botón "Entendido (no insistir)": marca la actividad como silenciada y no vuelve a sonar
+    if ($Url -match '^bbexam://entendido') {
+        $md = @{}
+        if ($Url -match '[?&]data=([^&]+)') { $md = [uri]::UnescapeDataString($Matches[1]) | ConvertFrom-Json }
+        $key = $md.key
+        if (-not $key) { throw "Sin key para silenciar" }
+        $file = Join-Path $HOME '.blackboard-mcp\alarms.json'
+        $st = @{}
+        if (Test-Path $file) {
+            $obj = Get-Content $file -Raw -Encoding utf8 | ConvertFrom-Json
+            foreach ($p in $obj.PSObject.Properties) { $st[$p.Name] = $p.Value }
+        }
+        $entry = $st[$key]
+        if (-not $entry) { $entry = [pscustomobject]@{ title = "$($md.title)" } }
+        $entry | Add-Member -NotePropertyName muted -NotePropertyValue $true -Force
+        $st[$key] = $entry
+        New-Item -ItemType Directory -Force -Path (Split-Path $file) | Out-Null
+        $st | ConvertTo-Json -Depth 6 | Set-Content -Path $file -Encoding utf8
+        Log "silenciada: $key ($($md.title))"
+        exit 0
+    }
     # --- examen desde el protocolo
     $exam = @{ title = "evaluación"; course = ""; due = "" }
     if ($Url -match '[?&]data=([^&]+)') {

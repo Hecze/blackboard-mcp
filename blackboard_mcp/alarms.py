@@ -30,7 +30,7 @@ from .config import Settings
 DEFAULT_INCLUDE = r"\bT\s*-?\s*\d+\b|\bEF\b|examen|sustitutori|parcial|final"
 DEFAULT_EXCLUDE = r"minicuestionario|cuestionario|asistencia|quiz|foro"
 OPEN = ("pending", "draft")            # still to hand in (overdue can't be submitted any more: late attempts are off)
-SNOOZE = timedelta(hours=2)            # the one snooze offered…
+SNOOZE = timedelta(hours=1)            # cerrar con la X (o posponer) = volver a sonar en 1 h
 MARGIN = timedelta(hours=1)            # …shortened so the last ring is at least this long before the deadline
 LAST_HOUR_EVERY = timedelta(minutes=15)
 AUMID = "Blackboard.Alarmas"           # app id the notifications are shown under (registered in HKCU, no admin)
@@ -135,19 +135,34 @@ def exam_arg(alarm: dict) -> str:
     data = {"title": alarm.get("title") or "", "course": alarm.get("course") or "",
             "due": alarm["due"].isoformat() if alarm.get("due") else "",
             "mode": "repo" if alarm.get("big") else "blackboard",
-            "url": alarm.get("url") or ""}
+            "url": alarm.get("url") or "", "key": alarm.get("key") or ""}
     return f"{PROTOCOL}://abrir?data={quote(json.dumps(data, ensure_ascii=False))}"
 
 
+def mute_arg(alarm: dict) -> str:
+    """`bbexam://entendido?data=<json>`: el botón "Entendido (no insistir)" de las actividades que no son examen.
+
+    Va por protocolo (no `activationType="system"`) porque Windows no distingue ese botón de cerrar la notificación
+    con la X: así sabemos que el alumno lo pulsó y lo silenciamos de verdad."""
+    data = {"key": alarm.get("key") or "", "title": alarm.get("title") or ""}
+    return f"{PROTOCOL}://entendido?data={quote(json.dumps(data, ensure_ascii=False))}"
+
+
 def toast_xml(title: str, course: str, left: timedelta, snooze: timedelta, open_arg: str | None = None,
-              big: bool = True) -> str:
+              big: bool = True, mute: str | None = None) -> str:
     # Two buttons, left to right in the order declared: OpenCode first, then the snooze/silence one.
     actions = ""
     if open_arg:
         actions += (f'<action activationType="protocol" arguments={quoteattr(open_arg)} '
                     f'content="{escape(OPENCODE_BUTTON)}"/>')
-    label = f"Posponer {escape(human_span(snooze))}" if big else "Entendido (no insistir)"
-    actions += f'<action activationType="system" arguments="dismiss" content="{label}"/>'
+    if big or not mute:
+        # cerrar con la X (o este botón) vuelve a sonar en `snooze`
+        actions += (f'<action activationType="system" arguments="dismiss" '
+                    f'content="Posponer {escape(human_span(snooze))}"/>')
+    else:
+        # solo este botón silencia; la X vuelve a sonar en `snooze`
+        actions += (f'<action activationType="protocol" arguments={quoteattr(mute)} '
+                    f'content="Entendido (no insistir)"/>')
     return (
         '<toast scenario="alarm" duration="long">'
         '<visual><binding template="ToastGeneric">'
@@ -205,12 +220,12 @@ def show_toast(xml: str, tag: str) -> None:
 
 
 def ring(alarm: dict) -> timedelta:
-    """Show the alarm; return how long it is snoozed for (the next ring). Non-big ones never ring again."""
+    """Show the alarm; return when it should ring again (cerrar con la X también cuenta)."""
     big = alarm.get("big", True)
     snooze = snooze_for(alarm["left"])
     show_toast(toast_xml(alarm["title"], course_title(alarm["course"]), alarm["left"], snooze,
-                         open_arg=exam_arg(alarm), big=big), alarm["key"])
-    return snooze if big else timedelta(0)
+                         open_arg=exam_arg(alarm), big=big, mute=None if big else mute_arg(alarm)), alarm["key"])
+    return snooze
 
 
 def run(settings: Settings, bb, now: datetime | None = None, notify=ring) -> list[dict]:
@@ -229,11 +244,9 @@ def run(settings: Settings, bb, now: datetime | None = None, notify=ring) -> lis
                       include=settings.alarm_include or DEFAULT_INCLUDE, exclude=settings.alarm_exclude or DEFAULT_EXCLUDE)
     for a in rang:
         snooze = notify(a)
-        entry = {"title": a["title"], "course": a["course"],
-                 "snoozed_until": (now + snooze).isoformat()}
-        if not a.get("big", True):
-            entry["muted"] = True
-        state[a["key"]] = entry
+        # cerrar con la X (o posponer) → vuelve a sonar; las no-examen se silencian solo con su botón (protocolo mute)
+        state[a["key"]] = {"title": a["title"], "course": a["course"],
+                           "snoozed_until": (now + snooze).isoformat()}
     if rang:
         save_state(settings, state)
     return rang

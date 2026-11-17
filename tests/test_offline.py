@@ -250,10 +250,11 @@ def test_alarms_ring_for_any_submission_but_only_big_ones_insist():
     assert [a["title"] for a in due_alarms(course, NOW, snoozed)] == ["EF", "Minicuestionario N°2"]
     muted = {"Minicuestionario N°2": {"muted": True}}
     assert [a["title"] for a in due_alarms(course, NOW, muted)] == ["EF", "Examen T1"]
-    # one snooze: 2 h, shortened so the next ring is still >= 1 h before the deadline; last hour every 15 min
-    assert snooze_for(timedelta(days=2)) == timedelta(hours=2)
-    assert snooze_for(timedelta(hours=3)) == timedelta(hours=2)
-    assert snooze_for(timedelta(hours=2, minutes=30)) == timedelta(hours=1, minutes=30)
+    # one snooze: 1 h (lo que hace también cerrar con la X), shortened so the next ring is still >= 1 h before the
+    # deadline; last hour every 15 min
+    assert snooze_for(timedelta(days=2)) == timedelta(hours=1)
+    assert snooze_for(timedelta(hours=3)) == timedelta(hours=1)
+    assert snooze_for(timedelta(hours=1, minutes=30)) == timedelta(minutes=30)
     assert snooze_for(timedelta(minutes=50)) == timedelta(minutes=15)
     assert snooze_for(timedelta(minutes=5)) == timedelta(minutes=5)
     assert human_left(timedelta(hours=15, minutes=20)) == "15 h 20 min" and human_left(timedelta(days=2, hours=3)) == "2 d 3 h"
@@ -274,14 +275,23 @@ def test_alarms_ring_for_any_submission_but_only_big_ones_insist():
     assert y.index("Hacer con OpenCode") < y.index("Posponer")          # left to right
     assert f'activationType="protocol" arguments="{arg}"' in y.replace("&#x27;", "'")
 
-    # small activity: same button, but the right one silences it for good, and the prompt sends us to Blackboard
-    small = dict(alarm, title="Cuestionario Tema 3", big=False, url="https://x/outline")
+    # small activity: the right button is a protocol action (so "cerrar con la X" NO silencia: vuelve en 1 h), and
+    # the prompt sends us to Blackboard
+    small = dict(alarm, title="Cuestionario Tema 3", big=False, url="https://x/outline", key="col_123")
     small_arg = exam_arg(small)
     assert "%22mode%22%3A%20%22blackboard%22" in small_arg
-    z = toast_xml("Cuestionario Tema 3", "Análisis y Diseño de Software", timedelta(hours=15), timedelta(hours=2),
-                  open_arg=small_arg, big=False)
-    assert "Entendido (no insistir)" in z and "Posponer" not in z
+    from blackboard_mcp.alarms import mute_arg
+    marg = mute_arg(small)
+    assert "entendido?" in marg
+    z = toast_xml("Cuestionario Tema 3", "Análisis y Diseño de Software", timedelta(hours=15), timedelta(hours=1),
+                  open_arg=small_arg, big=False, mute=marg)
+    assert "Entendido (no insistir)" in z and "Posponer" not in z and z.count("<action ") == 2
+    assert f'activationType="protocol" arguments="{marg}"' in z.replace("&#x27;", "'")
+    # sin mute (por si faltara), cae al botón de posponer (dismiss)
+    z2 = toast_xml("Cuestionario Tema 3", "X", timedelta(hours=15), timedelta(hours=1), big=False)
+    assert "Posponer 1 h" in z2 and z2.count("<action ") == 1
     assert "%22mode%22%3A%20%22repo%22" in arg     # T1 sigue yendo por el repo
+
 
 
 
