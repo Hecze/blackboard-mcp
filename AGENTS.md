@@ -89,10 +89,17 @@ Record any new lasting privilege like this here.
 - Exam alarms: scheduled task **"Blackboard alarmas"** (`scripts/install-alarms.ps1`) runs `blackboard-mcp alarms`
   every 15 min; snoozes are stored in `~/.blackboard-mcp/alarms.json`. An alarm only stops when Blackboard shows the
   evaluation submitted/graded — never mark it done or edit that file to silence it.
-  The alarm has two buttons: **Hacer con OpenCode** (left) and **Posponer** (right). The left one fires `bbexam://` →
+  It rings for **any** pending submission with a date (`alarm_include`/`alarm_exclude` now only decide what counts as
+  "big"). **Big** = T1/T2/T3/EF/sustitutorio/parcial/final: snooze + insist until submitted. **Everything else**
+  (cuestionarios, simulaciones, entregables, tareas): rings **once** and is stored with `muted: true`, so it never
+  comes back — that is the "Entendido (no insistir)" button.
+  The alarm has two buttons: **Hacer con OpenCode** (left) and the snooze one (right). The left one fires `bbexam://` →
   `scripts/abrir-examen-opencode.ps1`, which opens a **new session tab** in the desktop app and leaves the exam prompt
   **written in the input, unsent** (the student presses Enter). It drives the UI on purpose: the API would send the
-  message by itself. The protocol is registered in HKCU by `alarms.register_app()`; nothing to install.
+  message by itself. The payload carries `mode`: `repo` for T1/T2/EF (the statement is a .docx; work in the blackboard
+  repo) and `blackboard` for every other activity (it is a form/quiz inside Blackboard: fill it page by page and
+  **stop before "Enviar"** so the student verifies and submits). The protocol is registered in HKCU by
+  `alarms.register_app()`; nothing to install.
   Keep that script saved as **UTF-8 with BOM** — PowerShell 5.1 reads it as ANSI otherwise and the prompt comes out
   with `Â«` and `rÃºbrica`. `-DryRun` prints the prompt without touching the app.
 

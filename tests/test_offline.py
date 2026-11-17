@@ -228,7 +228,7 @@ def test_mcp_tool_output_is_compact_json_once():
     assert not (isinstance(r, tuple) and r[1])                                # no duplicate structured copy
 
 
-def test_alarms_only_big_open_evaluations():
+def test_alarms_ring_for_any_submission_but_only_big_ones_insist():
     from datetime import timedelta
     from blackboard_mcp.alarms import course_title, due_alarms, human_left, is_big, snooze_for, toast_xml
     for t in ("Examen T1", "T2", "EVALUACIÓN T1", "Examen Final", "EF", "Examen Sustitutorio", "Examen Certificado"):
@@ -240,11 +240,16 @@ def test_alarms_only_big_open_evaluations():
         "due": (NOW + timedelta(hours=hours)).isoformat()}
     course = {"BD": [ev("Examen T1"), ev("Examen T2", status="submitted"), ev("T3", status="graded"),
                      ev("Examen Final", hours=24 * 30), ev("Examen Sustitutorio", hours=-1), ev("Minicuestionario N°2"),
-                     ev("EF", status="draft", hours=3)]}
+                     ev("EF", status="draft", hours=3), ev("Asistencia", kind="grade_only")]}
     rang = due_alarms(course, NOW, {})
-    assert [a["title"] for a in rang] == ["EF", "Examen T1"]          # most urgent first; drafts still ring
+    # every pending submission rings, most urgent first; the "big" ones are flagged so they can insist
+    assert [a["title"] for a in rang] == ["EF", "Examen T1", "Minicuestionario N°2"]
+    assert [a["big"] for a in rang] == [True, True, False]
+    # a snoozed big one is quiet for that time; a muted small one never comes back
     snoozed = {"Examen T1": {"snoozed_until": (NOW + timedelta(hours=1)).isoformat()}}
-    assert [a["title"] for a in due_alarms(course, NOW, snoozed)] == ["EF"]
+    assert [a["title"] for a in due_alarms(course, NOW, snoozed)] == ["EF", "Minicuestionario N°2"]
+    muted = {"Minicuestionario N°2": {"muted": True}}
+    assert [a["title"] for a in due_alarms(course, NOW, muted)] == ["EF", "Examen T1"]
     # one snooze: 2 h, shortened so the next ring is still >= 1 h before the deadline; last hour every 15 min
     assert snooze_for(timedelta(days=2)) == timedelta(hours=2)
     assert snooze_for(timedelta(hours=3)) == timedelta(hours=2)
@@ -257,17 +262,26 @@ def test_alarms_only_big_open_evaluations():
     assert 'scenario="alarm"' in x and "Looping.Alarm" in x and x.count("<action ") == 1 and "Posponer 2 h" in x
     assert "<text>Examen T1 · Base de Datos</text><text>Quedan 15 h 20 min</text>" in x and "Vence" not in x
 
-    # two buttons: "Hacer con OpenCode" (protocol, first = left) and the snooze
+    # two buttons: "Hacer con OpenCode" (protocol, first = left) and the snooze/silence one
     from datetime import datetime, timezone
     from blackboard_mcp.alarms import PROTOCOL, exam_arg
     alarm = {"title": "Examen T1", "course": "GDAT5373 BASE DE DATOS",
-             "due": datetime(2026, 11, 19, 12, tzinfo=timezone.utc), "left": timedelta(hours=15, minutes=20)}
+             "due": datetime(2026, 11, 19, 12, tzinfo=timezone.utc), "left": timedelta(hours=15, minutes=20), "big": True}
     arg = exam_arg(alarm)
     assert arg.startswith(f"{PROTOCOL}://abrir?data=") and "Examen%20T1" in arg.replace("+", "%20")
     y = toast_xml("Examen T1", "Base de Datos", timedelta(hours=15, minutes=20), timedelta(hours=2), open_arg=arg)
     assert y.count("<action ") == 2
     assert y.index("Hacer con OpenCode") < y.index("Posponer")          # left to right
     assert f'activationType="protocol" arguments="{arg}"' in y.replace("&#x27;", "'")
+
+    # small activity: same button, but the right one silences it for good, and the prompt sends us to Blackboard
+    small = dict(alarm, title="Cuestionario Tema 3", big=False, url="https://x/outline")
+    small_arg = exam_arg(small)
+    assert "%22mode%22%3A%20%22blackboard%22" in small_arg
+    z = toast_xml("Cuestionario Tema 3", "Análisis y Diseño de Software", timedelta(hours=15), timedelta(hours=2),
+                  open_arg=small_arg, big=False)
+    assert "Entendido (no insistir)" in z and "Posponer" not in z
+    assert "%22mode%22%3A%20%22repo%22" in arg     # T1 sigue yendo por el repo
 
 
 

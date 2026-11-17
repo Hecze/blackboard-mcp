@@ -102,12 +102,23 @@ try {
     Log "examen: $($exam.title) | $($exam.course)"
 
     $skills = Join-Path $repo '.claude\skills'
-    $prompt = @(
-        "Resuelve «$($exam.title)» de $($exam.course)."
-        "Trabaja en $repo y lee .claude\skills\obtener-contexto-evaluacion\SKILL.md (expediente: enunciado, rúbrica, sílabo, anuncios, transcripciones)."
-        "Para entregar, .claude\skills\entregables-sin-huella\SKILL.md."
-    ) -join " "
-    Log "prompt: $($prompt.Length) chars"
+    $mode = if ($exam.mode) { $exam.mode } else { 'repo' }
+    if ($mode -eq 'blackboard') {
+        # formulario/cuestionario dentro de Blackboard: se resuelve en la web y se deja antes de "Enviar"
+        $prompt = @(
+            "Resuelve la actividad «$($exam.title)» de $($exam.course) en Blackboard: $($exam.url)"
+            "Es un formulario dentro de Blackboard: avanza página por página y déjalo completo en la última, SIN pulsar Enviar (yo verifico y envío)."
+            "Si algo no se puede (archivo adjunto, límite de intentos), dime qué falta antes de tocar nada."
+        ) -join " "
+    } else {
+        # T1/T2/EF: el enunciado es un .docx y se resuelve en el repo
+        $prompt = @(
+            "Resuelve «$($exam.title)» de $($exam.course)."
+            "Trabaja en $repo y lee .claude\skills\obtener-contexto-evaluacion\SKILL.md (expediente: enunciado, rúbrica, sílabo, anuncios, transcripciones)."
+            "Para entregar, .claude\skills\entregables-sin-huella\SKILL.md."
+        ) -join " "
+    }
+    Log "mode=$mode prompt: $($prompt.Length) chars"
     if ($DryRun) {
         [IO.File]::WriteAllText((Join-Path $env:TEMP 'bbexam-prompt.txt'), $prompt, (New-Object Text.UTF8Encoding($false)))
         Write-Output $prompt

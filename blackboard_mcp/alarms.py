@@ -87,21 +87,33 @@ def human_span(span: timedelta) -> str:
 
 def due_alarms(evals_by_course: dict, now: datetime, state: dict, days: int = 7,
                include: str = DEFAULT_INCLUDE, exclude: str = DEFAULT_EXCLUDE) -> list[dict]:
-    """Evaluations that should ring now: big, still open, due within `days`, not snoozed. Most urgent first."""
+    """Everything still to hand in and due within `days`, most urgent first.
+
+    Two kinds:
+    - `big=True`  (T1/T2/T3…, EF, sustitutorio, parcial, final): insists — snooze and ring again until Blackboard shows
+      it submitted.
+    - `big=False` (any other submission: cuestionarios, simulaciones, entregables, tareas): rings **once**; one snooze
+      and it never comes back (`muted` in the state).
+    """
     out = []
     for course, evs in evals_by_course.items():
         for e in evs:
             due = parse_dt(e.get("due"))
-            if not due or e.get("kind") != "submission" or e.get("status") not in OPEN or not is_big(e.get("title"), include, exclude):
+            if not due or e.get("kind") != "submission" or e.get("status") not in OPEN:
                 continue
             left = due - now
             if left <= timedelta(0) or left > timedelta(days=days):
                 continue
+            big = is_big(e.get("title"), include, exclude)
             key = e.get("column_id") or f"{course}|{e.get('title')}"
-            until = parse_dt((state.get(key) or {}).get("snoozed_until"))
+            st = state.get(key) or {}
+            if st.get("muted"):
+                continue
+            until = parse_dt(st.get("snoozed_until"))
             if until and until > now:
                 continue
-            out.append({"key": key, "course": course, "title": e.get("title"), "due": due, "left": left})
+            out.append({"key": key, "course": course, "title": e.get("title"), "due": due, "left": left,
+                        "big": big, "content_id": e.get("content_id"), "url": e.get("open_in_blackboard")})
     return sorted(out, key=lambda a: a["due"])
 
 
@@ -114,19 +126,28 @@ def course_title(label: str) -> str:
 
 
 def exam_arg(alarm: dict) -> str:
-    """`bbexam://abrir?data=<json>` for the "Hacer con OpenCode" button: what the PowerShell handler needs."""
+    """`bbexam://abrir?data=<json>` for the "Hacer con OpenCode" button: what the PowerShell handler needs.
+
+    `mode`: "repo"        → T1/T2/EF… el enunciado es un .docx: se trabaja en el repo blackboard.
+            "blackboard"  → cualquier otra actividad: es un formulario/cuestionario dentro de Blackboard; se avanza
+                            página por página y se deja antes de "Enviar".
+    """
     data = {"title": alarm.get("title") or "", "course": alarm.get("course") or "",
-            "due": alarm["due"].isoformat() if alarm.get("due") else ""}
+            "due": alarm["due"].isoformat() if alarm.get("due") else "",
+            "mode": "repo" if alarm.get("big") else "blackboard",
+            "url": alarm.get("url") or ""}
     return f"{PROTOCOL}://abrir?data={quote(json.dumps(data, ensure_ascii=False))}"
 
 
-def toast_xml(title: str, course: str, left: timedelta, snooze: timedelta, open_arg: str | None = None) -> str:
-    # Two buttons, left to right in the order declared: OpenCode first, snooze second.
+def toast_xml(title: str, course: str, left: timedelta, snooze: timedelta, open_arg: str | None = None,
+              big: bool = True) -> str:
+    # Two buttons, left to right in the order declared: OpenCode first, then the snooze/silence one.
     actions = ""
     if open_arg:
         actions += (f'<action activationType="protocol" arguments={quoteattr(open_arg)} '
                     f'content="{escape(OPENCODE_BUTTON)}"/>')
-    actions += f'<action activationType="system" arguments="dismiss" content="Posponer {escape(human_span(snooze))}"/>'
+    label = f"Posponer {escape(human_span(snooze))}" if big else "Entendido (no insistir)"
+    actions += f'<action activationType="system" arguments="dismiss" content="{label}"/>'
     return (
         '<toast scenario="alarm" duration="long">'
         '<visual><binding template="ToastGeneric">'
@@ -184,15 +205,19 @@ def show_toast(xml: str, tag: str) -> None:
 
 
 def ring(alarm: dict) -> timedelta:
-    """Show the alarm; return how long it is snoozed for (the next ring)."""
+    """Show the alarm; return how long it is snoozed for (the next ring). Non-big ones never ring again."""
+    big = alarm.get("big", True)
     snooze = snooze_for(alarm["left"])
     show_toast(toast_xml(alarm["title"], course_title(alarm["course"]), alarm["left"], snooze,
-                         open_arg=exam_arg(alarm)), alarm["key"])
-    return snooze
+                         open_arg=exam_arg(alarm), big=big), alarm["key"])
+    return snooze if big else timedelta(0)
 
 
 def run(settings: Settings, bb, now: datetime | None = None, notify=ring) -> list[dict]:
-    """One check: ring every due alarm and store when each may ring again (the snooze starts when it rings)."""
+    """One check: ring every due alarm and remember what happens next.
+
+    T1/T2/EF… (`big`): snooze, and ring again until Blackboard shows it submitted.
+    Anything else: rings once and is marked `muted` (one "Entendido" and it never comes back)."""
     from .bb import course_labels
     from .sync import Syncer
     now = now or datetime.now(timezone.utc)
@@ -204,7 +229,11 @@ def run(settings: Settings, bb, now: datetime | None = None, notify=ring) -> lis
                       include=settings.alarm_include or DEFAULT_INCLUDE, exclude=settings.alarm_exclude or DEFAULT_EXCLUDE)
     for a in rang:
         snooze = notify(a)
-        state[a["key"]] = {"title": a["title"], "course": a["course"], "snoozed_until": (now + snooze).isoformat()}
+        entry = {"title": a["title"], "course": a["course"],
+                 "snoozed_until": (now + snooze).isoformat()}
+        if not a.get("big", True):
+            entry["muted"] = True
+        state[a["key"]] = entry
     if rang:
         save_state(settings, state)
     return rang

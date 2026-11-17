@@ -40,7 +40,7 @@ Las variables `BB_BASE_URL`, `BB_SSO_BUTTON` y `BB_CLASS_WEB` tienen prioridad s
 
 Alarmas de exámenes (opcional, mismo archivo): `"alarm_days": 7` (cuántos días antes empiezan a sonar),
 `"alarm_include"` y `"alarm_exclude"` (expresiones regulares sobre el título; por defecto suenan T1/T2/T3, EF,
-examen, sustitutorio, parcial y final, y no los cuestionarios ni la asistencia). Es una **notificación de alarma nativa de Windows** (se queda en pantalla, sonido de alarma en bucle) con dos botones: **Hacer con OpenCode** (abre una pestaña nueva y deja el prompt del examen escrito en el input, sin enviarlo: tú decides cuándo darle Enter) y **Posponer** (2 h, o menos para que el último aviso llegue al menos 1 h antes del vencimiento; en esa última hora suena cada 15 min).
+examen, sustitutorio, parcial y final, y no los cuestionarios ni la asistencia). Suena con **cualquier actividad pendiente con fecha** (exámenes, cuestionarios, simulaciones, entregables, tareas). Es una **notificación de alarma nativa de Windows** (se queda en pantalla, sonido de alarma en bucle) con dos botones: **Hacer con OpenCode** (abre una pestaña nueva y deja el prompt escrito en el input, sin enviarlo: tú decides cuándo darle Enter) y el segundo botón, que depende del tipo: en **T1/T2/T3/EF/sustitutorio/parcial/final** dice **Posponer 2 h** y vuelve a sonar (2 h, o menos para que el último aviso llegue al menos 1 h antes del vencimiento; en esa última hora cada 15 min) hasta que Blackboard lo marque enviado; en **cualquier otra actividad** dice **Entendido (no insistir)** y no vuelve a molestar.
 
 Inicio de sesión (una vez; **el estudiante escribe su contraseña en la ventana que se abre**, el agente nunca):
 ```powershell
