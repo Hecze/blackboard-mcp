@@ -40,8 +40,7 @@ Las variables `BB_BASE_URL`, `BB_SSO_BUTTON` y `BB_CLASS_WEB` tienen prioridad s
 
 Alarmas de exámenes (opcional, mismo archivo): `"alarm_days": 7` (cuántos días antes empiezan a sonar),
 `"alarm_include"` y `"alarm_exclude"` (expresiones regulares sobre el título; por defecto suenan T1/T2/T3, EF,
-examen, sustitutorio, parcial y final, y no los cuestionarios ni la asistencia). Cuánto se puede posponer depende
-de lo que falta: más de 24 h → 1, 2 o 4 h; 6–24 h → 1 o 2 h; 2–6 h → 30 min o 1 h; menos → 15 o 5 min.
+examen, sustitutorio, parcial y final, y no los cuestionarios ni la asistencia). Es una **notificación de alarma nativa de Windows** (se queda en pantalla, sonido de alarma en bucle) con un solo botón: posponer 2 h, o menos para que el último aviso llegue al menos 1 h antes del vencimiento; en esa última hora suena cada 15 min.
 
 Inicio de sesión (una vez; **el estudiante escribe su contraseña en la ventana que se abre**, el agente nunca):
 ```powershell
@@ -122,7 +121,7 @@ Las fuentes están en [`skills/`](skills/): Markdown con frontmatter YAML, legib
 | `scripts\env\install-yed-arm64.ps1` | yEd en ARM64 (JDK ARM64 + accesos directos) |
 | `scripts\pdf2png.py` | PDF a PNG |
 | `scripts\install-keepalive.ps1` | Tarea que renueva la sesión de Blackboard |
-| `scripts\install-alarms.ps1` | Tarea **"Blackboard alarmas"**: cada 15 min revisa tus exámenes (T1, T2, T3, EF, sustitutorio, parcial…) y abre una alarma que solo se pospone, no se apaga, hasta que Blackboard los marque como enviados. Prueba: `blackboard-mcp alarms --demo` |
+| `scripts\install-alarms.ps1` | Tarea **"Blackboard alarmas"**: cada 15 min revisa tus exámenes (T1, T2, T3, EF, sustitutorio, parcial…) y muestra una alarma nativa de Windows que solo se pospone, no se apaga, hasta que Blackboard los marque como enviados. Prueba: `blackboard-mcp alarms --demo` |
 | `scripts\sync_skills.py` | Copia `skills/` a las carpetas de cada harness |
 
 ## Desarrollo

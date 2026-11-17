@@ -230,7 +230,7 @@ def test_mcp_tool_output_is_compact_json_once():
 
 def test_alarms_only_big_open_evaluations():
     from datetime import timedelta
-    from blackboard_mcp.alarms import due_alarms, is_big, snooze_options
+    from blackboard_mcp.alarms import course_title, due_alarms, human_left, is_big, snooze_for, toast_xml
     for t in ("Examen T1", "T2", "EVALUACIÓN T1", "Examen Final", "EF", "Examen Sustitutorio", "Examen Certificado"):
         assert is_big(t), t
     for t in ("Minicuestionario N° 1 Parte 1", "Asistencia", "Cuestionario Tema 1", "Entregable al 50%"):
@@ -245,10 +245,17 @@ def test_alarms_only_big_open_evaluations():
     assert [a["title"] for a in rang] == ["EF", "Examen T1"]          # most urgent first; drafts still ring
     snoozed = {"Examen T1": {"snoozed_until": (NOW + timedelta(hours=1)).isoformat()}}
     assert [a["title"] for a in due_alarms(course, NOW, snoozed)] == ["EF"]
-    assert snooze_options(timedelta(days=3)) == [60, 120, 240]
-    assert snooze_options(timedelta(hours=3)) == [30, 60]
-    assert snooze_options(timedelta(minutes=40)) == [15]
-    assert all(m * 60 < 20 * 60 for m in snooze_options(timedelta(minutes=20)))   # never past the deadline
+    # one snooze: 2 h, shortened so the next ring is still >= 1 h before the deadline; last hour every 15 min
+    assert snooze_for(timedelta(days=2)) == timedelta(hours=2)
+    assert snooze_for(timedelta(hours=3)) == timedelta(hours=2)
+    assert snooze_for(timedelta(hours=2, minutes=30)) == timedelta(hours=1, minutes=30)
+    assert snooze_for(timedelta(minutes=50)) == timedelta(minutes=15)
+    assert snooze_for(timedelta(minutes=5)) == timedelta(minutes=5)
+    assert human_left(timedelta(hours=15, minutes=20)) == "15 h 20 min" and human_left(timedelta(days=2, hours=3)) == "2 d 3 h"
+    assert course_title("GDAT5373 BASE DE DATOS [CIBERTEC.GDAT5373.2026]") == "Base de Datos"
+    x = toast_xml("Examen T1", "Base de Datos", timedelta(hours=15, minutes=20), timedelta(hours=2))
+    assert 'scenario="alarm"' in x and "Looping.Alarm" in x and x.count("<action ") == 1 and "Posponer 2 h" in x
+    assert "Quedan 15 h 20 min" in x and "Vence" not in x
 
 
 def test_course_labels_unique_for_repeated_courses():

@@ -7,22 +7,14 @@ import sys
 
 
 def _alarms(demo: bool) -> int:
-    """One alarm check (run every 15 min by a scheduled task). Only one instance at a time."""
-    from datetime import datetime, timedelta, timezone
+    """One alarm check (run every 15 min by a scheduled task)."""
+    from datetime import timedelta
 
     from . import alarms
-    if sys.platform == "win32":   # a window may still be open from the previous run: don't stack another one
-        import ctypes
-        k32 = ctypes.windll.kernel32
-        k32.CreateMutexW(None, False, "Local\\blackboard-mcp-alarms")
-        if k32.GetLastError() == 183:   # ERROR_ALREADY_EXISTS
-            return 0
     if demo:
-        now = datetime.now(timezone.utc)
-        m = alarms.show_window({"title": "Examen T1 (demo)", "course": "GDAT5373 BASE DE DATOS", "status": "pending",
-                                "due": now + timedelta(hours=15, minutes=20), "left": timedelta(hours=15, minutes=20),
-                                "attempts_allowed": 2, "url": None}, now)
-        print(f"pospuesto {m} min")
+        snooze = alarms.ring({"key": "demo", "title": "Examen T1 (demo)", "course": "GDAT5373 BASE DE DATOS",
+                              "left": timedelta(hours=15, minutes=20)})
+        print(f"alarma mostrada; volvería a sonar en {alarms.human_span(snooze)}")
         return 0
     from .auth import LoginRequired
     from .bb import Blackboard
@@ -31,7 +23,7 @@ def _alarms(demo: bool) -> int:
     try:
         rang = alarms.run(s, Blackboard(s))
     except LoginRequired as e:
-        alarms.session_lost_window(str(e))
+        alarms.session_lost()
         return 2
     print(json.dumps([{"title": a["title"], "course": a["course"], "due": a["due"].isoformat()} for a in rang],
                      ensure_ascii=False))
