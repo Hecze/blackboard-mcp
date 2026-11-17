@@ -389,6 +389,86 @@ async def bb_sync_status() -> dict:
     return {"running": False, "report": _job.get("report")}
 
 
+# --- actividades dentro de Blackboard ------------------------------------------------------------------------------
+# Blackboard va por SSO de Outlook: el navegador de la app (o cualquier navegador limpio) cae en el portal de acceso.
+# Estas herramientas usan el navegador que SÍ tiene la sesión guardada y permiten avanzar un cuestionario página por
+# página. La regla es que "Enviar" lo pulsa el alumno: bb_clic se niega con ese botón.
+
+_nav = None
+
+
+def _navegador():
+    global _nav
+    if _nav is None:
+        from .navegador import Navegador
+        _nav = Navegador(_settings)
+    return _nav
+
+
+@tool
+async def bb_navegar(url: str, visible: bool = True) -> dict:
+    """Open a Blackboard page in a real browser that ALREADY has the student's session (SSO cookie), so no sign-in
+    is needed. Returns the page text plus every element you can act on, numbered (`ref`). Use the refs with bb_clic,
+    bb_rellenar, bb_elegir and bb_marcar. `visible=False` runs it without a window (no session issues either way)."""
+    return await _run(lambda: _navegador().abrir(url, visible))
+
+
+@tool
+async def bb_ver() -> dict:
+    """Re-read the page the browser is on right now (text + numbered elements). Refs from a previous call may have
+    expired: always use the refs from the latest result."""
+    return await _run(lambda: _navegador().ver())
+
+
+@tool
+async def bb_clic(ref: str) -> dict:
+    """Click an element by the `ref` from the latest snapshot and return the resulting page. It REFUSES to click
+    "Enviar" / "Entregar" / "Finalizar intento": that final step belongs to the student."""
+    return await _run(lambda: _navegador().clic(ref))
+
+
+@tool
+async def bb_rellenar(ref: str, texto: str) -> dict:
+    """Type `texto` into the input/textarea with that `ref` (replaces its content) and return the page."""
+    return await _run(lambda: _navegador().rellenar(ref, texto))
+
+
+@tool
+async def bb_elegir(ref: str, opcion: str) -> dict:
+    """Pick `opcion` (the visible option text) in the <select> with that `ref`."""
+    return await _run(lambda: _navegador().elegir(ref, opcion))
+
+
+@tool
+async def bb_marcar(ref: str, marcado: bool = True) -> dict:
+    """Tick (or untick) the checkbox/radio with that `ref`."""
+    return await _run(lambda: _navegador().marcar(ref, marcado))
+
+
+@tool
+async def bb_tecla(tecla: str) -> dict:
+    """Press a key in the page, e.g. "Enter", "PageDown", "Escape"."""
+    return await _run(lambda: _navegador().tecla(tecla))
+
+
+@tool
+async def bb_atras() -> dict:
+    """Go back one page in the browser."""
+    return await _run(lambda: _navegador().atras())
+
+
+@tool
+async def bb_captura() -> dict:
+    """Save a screenshot of the current page and return its path (show it to the student when you stop)."""
+    return await _run(lambda: _navegador().captura())
+
+
+@tool
+async def bb_cerrar_navegador() -> dict:
+    """Close the browser (it keeps the refreshed session cookies for the next time)."""
+    return await _run(lambda: _navegador().cerrar())
+
+
 def main() -> None:
     mcp.run()
 

@@ -135,11 +135,13 @@ try {
     $skills = Join-Path $repo '.claude\skills'
     $mode = if ($exam.mode) { $exam.mode } else { 'repo' }
     if ($mode -eq 'blackboard') {
-        # formulario/cuestionario dentro de Blackboard: se resuelve en la web y se deja antes de "Enviar"
+        # formulario/cuestionario dentro de Blackboard: se resuelve con el MCP "blackboard" (que sí trae la sesión de
+        # Outlook) y se deja antes de "Enviar"
         $prompt = @(
             "Resuelve la actividad «$($exam.title)» de $($exam.course) en Blackboard: $($exam.url)"
-            "Es un formulario dentro de Blackboard: avanza página por página y déjalo completo en la última, SIN pulsar Enviar (yo verifico y envío)."
-            "Si algo no se puede (archivo adjunto, límite de intentos), dime qué falta antes de tocar nada."
+            "Usa el MCP blackboard (bb_navegar/bb_ver/bb_clic/bb_rellenar/bb_marcar): ya trae mi sesión de Outlook; el navegador de la app no la tiene."
+            "Lee .claude\skills\resolver-actividad-blackboard\SKILL.md y sigue esa regla: avanza página por página y para antes de Enviar (yo reviso y envío)."
+            "Si hay que pulsar «Iniciar intento» (gasta un intento y arranca el cronómetro), avísame y espera mi OK."
         ) -join " "
     } else {
         # T1/T2/EF: el enunciado es un .docx y se resuelve en el repo

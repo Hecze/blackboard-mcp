@@ -63,6 +63,26 @@ Comprobar todo:
 powershell -ExecutionPolicy Bypass -File scripts\env\doctor.ps1
 ```
 
+### Actividades que se resuelven dentro de Blackboard
+
+Blackboard va por **SSO de Outlook**, así que no hay usuario/contraseña que guardar: la sesión es lo que cuenta, y
+vive en `~/.blackboard-mcp/` (perfil de Chrome + cookies). El **navegador de la app no la tiene** (es otro navegador y
+cae en el portal de acceso). Para trabajar dentro de un cuestionario, el agente usa el MCP `blackboard`, que abre
+Chrome con esa sesión:
+
+| Herramienta | Qué hace |
+|---|---|
+| `bb_navegar(url)` | abre la actividad y devuelve el texto de la página y las `ref` de cada elemento |
+| `bb_ver()` | relee la página (las `ref` caducan al cambiar de página) |
+| `bb_clic(ref)` | pulsa un botón o enlace — **se niega con "Enviar"/"Entregar"/"Finalizar intento"** |
+| `bb_rellenar(ref, texto)` | escribe en un campo |
+| `bb_elegir(ref, opción)` / `bb_marcar(ref)` | desplegable / radio y checkbox |
+| `bb_captura()` | PNG de cómo quedó, para que el estudiante revise |
+
+El agente avanza página por página y **se detiene antes de "Enviar"**: el envío lo pulsa el estudiante. El flujo
+completo está en `skills/resolver-actividad-blackboard/SKILL.md`. Si la actividad tiene "Iniciar intento", eso gasta un
+intento y arranca el cronómetro: se pide permiso antes.
+
 ## Registrar el servidor en tu cliente
 
 Es un servidor MCP **stdio**. El comando es `<repo>\.venv\Scripts\blackboard-mcp.exe` con el argumento `serve`.

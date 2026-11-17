@@ -328,6 +328,29 @@ def test_alarms_are_shown_one_at_a_time():
 
 
 
+def test_navegador_blocks_the_submit_button_and_spots_the_login_page():
+    """Las actividades dentro de Blackboard se resuelven con `bb_*` sobre la sesión guardada; el envío es del alumno."""
+    from blackboard_mcp.config import Settings
+    from blackboard_mcp.navegador import ENVIAR, Navegador
+    for t in ("Enviar", "enviar intento", "Entregar", " Guardar y enviar ", "Submit", "Finalizar intento"):
+        assert ENVIAR.match(t), t
+    for t in ("Guardar", "Guardar borrador", "Siguiente", "Iniciar intento", "Anterior", ""):
+        assert not ENVIAR.match(t), t
+    nav = Navegador(Settings(base_url="https://cibertec.blackboard.com"))
+    assert not nav._login_required("https://cibertec.blackboard.com/ultra/courses/_1_1/outline")
+    assert nav._login_required("https://login.microsoftonline.com/xyz/oauth2/authorize")
+    assert nav._login_required("https://cibertec.blackboard.com/webapps/login/")   # sin /ultra: portal de acceso
+
+
+def test_blackboard_mcp_exposes_the_navigator_tools():
+    import asyncio
+
+    from blackboard_mcp import server
+    names = {t.name for t in asyncio.run(server.mcp.list_tools())}
+    assert {"bb_navegar", "bb_ver", "bb_clic", "bb_rellenar", "bb_elegir", "bb_marcar", "bb_tecla", "bb_atras",
+            "bb_captura", "bb_cerrar_navegador"} <= names
+
+
 def test_course_labels_unique_for_repeated_courses():
     from blackboard_mcp.bb import course_labels
     a = Course(id="_1", course_id="CIBERTEC.GDAT5373.202610202612", name="GDAT5373 BASE DE DATOS", code="GDAT5373")

@@ -111,6 +111,26 @@ Record any new lasting privilege like this here.
   Keep that script saved as **UTF-8 with BOM** — PowerShell 5.1 reads it as ANSI otherwise and the prompt comes out
   with `Â«` and `rÃºbrica`. `-DryRun` prints the prompt without touching the app.
 
+## Activities that live inside Blackboard (`navegador.py`)
+
+- Blackboard signs in through **Outlook SSO + MFA**. There is no password to store and nothing an agent can type:
+  the session *is* the credential, and it lives in `~/.blackboard-mcp/browser-profile` + `cookies.json` (Chrome,
+  refreshed by `bb_login` and the keep-alive task). **Never** ask the student for a password or put one in `.env`.
+- The **app's browser has no session**: it is a different browser and lands on the access portal. That is not a bug
+  and not a credentials problem — do not try to sign in there.
+- `navegador.Navegador` launches the installed Chrome (`settings.browser_channel`) with
+  `new_context(storage_state=cookies.json)`, so `bb_navegar` lands signed in. It owns Playwright in **its own thread**
+  (the sync API cannot be shared across threads) and keeps the page between calls. Cookies are written back after
+  each action, which also keeps the HTTP tools fresh.
+- Tools: `bb_navegar` / `bb_ver` / `bb_clic` / `bb_rellenar` / `bb_elegir` / `bb_marcar` / `bb_tecla` / `bb_atras` /
+  `bb_captura` / `bb_cerrar_navegador`. Refs (`data-bbt` attributes, `frame:ref` for iframes) expire when the page
+  changes; always use the refs from the latest result.
+- **`bb_clic` refuses the submit buttons** (`ENVIAR` regex: Enviar / Entregar / Submit / Finalizar intento…): the
+  student reviews and presses it. Workflow in `skills/resolver-actividad-blackboard/SKILL.md`.
+- "Iniciar intento" burns an attempt and starts the timer: cover that in the prompt/skill and wait for the student.
+- Sessions that expire mid-way come back as `login_required` + `critical` from the snapshot; the tool writes it to
+  `session-health.json` so the rest of the server reports it too.
+
 ## Working on the code
 
 - Python venv in `.venv` (on ARM64, `pip install --only-binary=:all: cryptography` first). Tests:
