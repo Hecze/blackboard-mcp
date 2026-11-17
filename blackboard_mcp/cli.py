@@ -6,6 +6,38 @@ import json
 import sys
 
 
+def _alarms(demo: bool) -> int:
+    """One alarm check (run every 15 min by a scheduled task). Only one instance at a time."""
+    from datetime import datetime, timedelta, timezone
+
+    from . import alarms
+    if sys.platform == "win32":   # a window may still be open from the previous run: don't stack another one
+        import ctypes
+        k32 = ctypes.windll.kernel32
+        k32.CreateMutexW(None, False, "Local\\blackboard-mcp-alarms")
+        if k32.GetLastError() == 183:   # ERROR_ALREADY_EXISTS
+            return 0
+    if demo:
+        now = datetime.now(timezone.utc)
+        m = alarms.show_window({"title": "Examen T1 (demo)", "course": "GDAT5373 BASE DE DATOS", "status": "pending",
+                                "due": now + timedelta(hours=15, minutes=20), "left": timedelta(hours=15, minutes=20),
+                                "attempts_allowed": 2, "url": None}, now)
+        print(f"pospuesto {m} min")
+        return 0
+    from .auth import LoginRequired
+    from .bb import Blackboard
+    from .config import load_settings
+    s = load_settings()
+    try:
+        rang = alarms.run(s, Blackboard(s))
+    except LoginRequired as e:
+        alarms.session_lost_window(str(e))
+        return 2
+    print(json.dumps([{"title": a["title"], "course": a["course"], "due": a["due"].isoformat()} for a in rang],
+                     ensure_ascii=False))
+    return 0
+
+
 def main() -> None:
     p = argparse.ArgumentParser(prog="blackboard-mcp", description="Blackboard Learn (Ultra) MCP server")
     sub = p.add_subparsers(dest="cmd")
@@ -17,7 +49,11 @@ def main() -> None:
     sp = sub.add_parser("sync", help="download PDFs from every current course (or the ones named)")
     sp.add_argument("courses", nargs="*")
     sub.add_parser("serve", help="run the MCP server on stdio (the default)")
+    sp = sub.add_parser("alarms", help="ring for pending exams (T1/T2/EF…) until Blackboard shows them submitted")
+    sp.add_argument("--demo", action="store_true", help="show a sample alarm window without contacting Blackboard")
     args = p.parse_args()
+    if args.cmd == "alarms":
+        sys.exit(_alarms(args.demo))
     if args.cmd in (None, "serve"):
         from .server import main as serve
         serve()

@@ -27,6 +27,12 @@ class Settings:
     # Class (class.com) site the school runs live lessons and their recordings through, e.g.
     # https://cibertec.class.com ("Launch Class" in a Blackboard course). Empty = not used.
     class_web: str = ""
+    # Exam alarms (blackboard-mcp alarms): ring for "big" evaluations due within this many days. The include/exclude
+    # regexes match evaluation titles; empty = defaults in alarms.py (T1/T2/T3, EF, examen, sustitutorio, parcial,
+    # final; not quizzes or attendance).
+    alarm_days: int = 7
+    alarm_include: str = ""
+    alarm_exclude: str = ""
     home: Path = HOME_DIR
 
     @property

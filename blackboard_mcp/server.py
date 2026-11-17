@@ -9,7 +9,7 @@ import anyio
 from mcp.server.fastmcp import FastMCP
 
 from .auth import LoginRequired, browser_login, read_health, write_health
-from .bb import Blackboard, body_links, handler_id, html_to_text, parse_dt
+from .bb import Blackboard, body_links, course_labels, handler_id, html_to_text, parse_dt
 from .config import load_settings
 from .sync import Syncer, safe
 
@@ -212,6 +212,7 @@ async def bb_evaluations(course: str | None = None, only_open: bool = False, lin
     def go():
         bb = _bb()
         cs = [bb.find_course(course)] if course else Syncer(_settings, bb).courses()
+        labels = course_labels(cs)
         by_course: dict[str, list] = {}
         counts: dict[str, int] = {}
         for c in cs:
@@ -220,7 +221,7 @@ async def bb_evaluations(course: str | None = None, only_open: bool = False, lin
                     continue
                 if not links:
                     e.pop("open_in_blackboard", None)
-                by_course.setdefault(c.short_name(), []).append(e)
+                by_course.setdefault(labels[c.id], []).append(e)
                 counts[e["status"]] = counts.get(e["status"], 0) + 1
         for evs in by_course.values():   # bb.evaluations already sorts by due date
             evs.sort(key=lambda e: (e["due"] is None, e["due"] or ""))
@@ -235,6 +236,7 @@ async def bb_announcements(course: str | None = None, days: int = 14) -> dict:
         bb = _bb()
         cs = [bb.find_course(course)] if course else Syncer(_settings, bb).courses()
         since = datetime.now(timezone.utc) - timedelta(days=days)
+        labels = course_labels(cs)
         by_course: dict[str, list] = {}
         for c in cs:
             anns = []
@@ -245,7 +247,7 @@ async def bb_announcements(course: str | None = None, days: int = 14) -> dict:
                 anns.append({"title": a.get("title"), "posted": a.get("created"),
                              "text": html_to_text(a.get("body"))[:1500]})
             if anns:
-                by_course[c.short_name()] = sorted(anns, key=lambda a: a["posted"] or "", reverse=True)
+                by_course[labels[c.id]] = sorted(anns, key=lambda a: a["posted"] or "", reverse=True)
         return {"days": days, "courses": by_course}
     return await _run(go)
 

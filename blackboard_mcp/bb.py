@@ -124,6 +124,13 @@ class Course:
         return name if not self.code or self.code in name else f"{self.code} {name}"
 
 
+def course_labels(courses: list["Course"]) -> dict[str, str]:
+    """Course id -> display name, unique: students keep old runs of the same course ("GDAT5373 BASE DE DATOS" from
+    July and from November), so a repeated name gets its Blackboard course id (which carries the term) appended."""
+    names = [c.short_name() for c in courses]
+    return {c.id: n if names.count(n) == 1 else f"{n} [{c.course_id or c.id}]" for c, n in zip(courses, names)}
+
+
 class Blackboard:
     def __init__(self, settings: Settings, transport: httpx.BaseTransport | None = None,
                  refresher: Callable[[Settings], bool] | None = refresh_silently):

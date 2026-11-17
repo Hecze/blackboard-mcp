@@ -86,6 +86,9 @@ Record any new lasting privilege like this here.
   `scripts/keepalive.ps1` at sign-in and every 4 hours; on failure it shows a Windows popup and logs to
   `~/.blackboard-mcp/keepalive.log`.
 - Settings: `~/.blackboard-mcp/config.json` (`base_url`, `sso_button`).
+- Exam alarms: scheduled task **"Blackboard alarmas"** (`scripts/install-alarms.ps1`) runs `blackboard-mcp alarms`
+  every 15 min; snoozes are stored in `~/.blackboard-mcp/alarms.json`. An alarm only stops when Blackboard shows the
+  evaluation submitted/graded — never mark it done or edit that file to silence it.
 
 ## Working on the code
 

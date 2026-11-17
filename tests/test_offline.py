@@ -226,3 +226,35 @@ def test_mcp_tool_output_is_compact_json_once():
     blocks = r[0] if isinstance(r, tuple) else r
     assert [b.text for b in blocks] == ['{"d":0,"e":{"g":false},"h":"x"}']   # 0 and False kept, empties dropped
     assert not (isinstance(r, tuple) and r[1])                                # no duplicate structured copy
+
+
+def test_alarms_only_big_open_evaluations():
+    from datetime import timedelta
+    from blackboard_mcp.alarms import due_alarms, is_big, snooze_options
+    for t in ("Examen T1", "T2", "EVALUACIÓN T1", "Examen Final", "EF", "Examen Sustitutorio", "Examen Certificado"):
+        assert is_big(t), t
+    for t in ("Minicuestionario N° 1 Parte 1", "Asistencia", "Cuestionario Tema 1", "Entregable al 50%"):
+        assert not is_big(t), t
+    ev = lambda title, status="pending", hours=20, kind="submission", col=None: {
+        "title": title, "status": status, "kind": kind, "column_id": col or title,
+        "due": (NOW + timedelta(hours=hours)).isoformat()}
+    course = {"BD": [ev("Examen T1"), ev("Examen T2", status="submitted"), ev("T3", status="graded"),
+                     ev("Examen Final", hours=24 * 30), ev("Examen Sustitutorio", hours=-1), ev("Minicuestionario N°2"),
+                     ev("EF", status="draft", hours=3)]}
+    rang = due_alarms(course, NOW, {})
+    assert [a["title"] for a in rang] == ["EF", "Examen T1"]          # most urgent first; drafts still ring
+    snoozed = {"Examen T1": {"snoozed_until": (NOW + timedelta(hours=1)).isoformat()}}
+    assert [a["title"] for a in due_alarms(course, NOW, snoozed)] == ["EF"]
+    assert snooze_options(timedelta(days=3)) == [60, 120, 240]
+    assert snooze_options(timedelta(hours=3)) == [30, 60]
+    assert snooze_options(timedelta(minutes=40)) == [15]
+    assert all(m * 60 < 20 * 60 for m in snooze_options(timedelta(minutes=20)))   # never past the deadline
+
+
+def test_course_labels_unique_for_repeated_courses():
+    from blackboard_mcp.bb import course_labels
+    a = Course(id="_1", course_id="CIBERTEC.GDAT5373.202610202612", name="GDAT5373 BASE DE DATOS", code="GDAT5373")
+    b = Course(id="_2", course_id="CIBERTEC.GDAT5373.202607202608", name="GDAT5373 BASE DE DATOS", code="GDAT5373")
+    c = Course(id="_3", course_id="X", name="MATE5491 MATEMATICA II", code="MATE5491")
+    lab = course_labels([a, b, c])
+    assert lab["_3"] == "MATE5491 MATEMATICA II" and lab["_1"] != lab["_2"] and "202610202612" in lab["_1"]
