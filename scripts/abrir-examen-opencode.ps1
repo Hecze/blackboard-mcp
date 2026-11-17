@@ -106,7 +106,6 @@ try {
         "Resuelve «$($exam.title)» de $($exam.course)."
         "Trabaja en $repo y lee .claude\skills\obtener-contexto-evaluacion\SKILL.md (expediente: enunciado, rúbrica, sílabo, anuncios, transcripciones)."
         "Para entregar, .claude\skills\entregables-sin-huella\SKILL.md."
-        "Si el profesor prohíbe IA, avísame."
     ) -join " "
     Log "prompt: $($prompt.Length) chars"
     if ($DryRun) {
