@@ -89,9 +89,12 @@ Record any new lasting privilege like this here.
 - Exam alarms: scheduled task **"Blackboard alarmas"** (`scripts/install-alarms.ps1`) runs `blackboard-mcp alarms`
   every 15 min; snoozes are stored in `~/.blackboard-mcp/alarms.json`. An alarm only stops when Blackboard shows the
   evaluation submitted/graded — never mark it done or edit that file to silence it.
-  The alarm has two buttons: **Hacer con OpenCode** (left; `bbexam://` → `scripts/abrir-examen-opencode.ps1`, which
-  creates a session in this repo through the local OpenCode API and sends the "dossier + solve it" prompt) and
-  **Posponer** (right). The protocol is registered in HKCU by `alarms.register_app()`; nothing to install.
+  The alarm has two buttons: **Hacer con OpenCode** (left) and **Posponer** (right). The left one fires `bbexam://` →
+  `scripts/abrir-examen-opencode.ps1`, which opens a **new session tab** in the desktop app and leaves the exam prompt
+  **written in the input, unsent** (the student presses Enter). It drives the UI on purpose: the API would send the
+  message by itself. The protocol is registered in HKCU by `alarms.register_app()`; nothing to install.
+  Keep that script saved as **UTF-8 with BOM** — PowerShell 5.1 reads it as ANSI otherwise and the prompt comes out
+  with `Â«` and `rÃºbrica`. `-DryRun` prints the prompt without touching the app.
 
 ## Working on the code
 
