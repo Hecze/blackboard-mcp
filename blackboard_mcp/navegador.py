@@ -30,24 +30,40 @@ NO_ENVIA = ("Bloqueado: ese botón ENVÍA la actividad y eso lo pulsas tú. Deja
             "«revisa y pulsa Enviar».")
 
 # Elementos con los que se puede interactuar, con su texto (la etiqueta del radio, el valor del campo…).
+# Blackboard Ultra pinta la evaluación con web components: las opciones viven en *shadow DOM*, así que hay que
+# recorrer los shadowRoot a mano (querySelectorAll del documento no entra) tanto para las refs como para el texto.
 _SNAP = r"""
 ([prefijo]) => {
   const visible = (el) => {
     const r = el.getBoundingClientRect(); const s = getComputedStyle(el);
     return r.width > 1 && r.height > 1 && s.visibility !== 'hidden' && s.display !== 'none' && s.opacity !== '0';
   };
-  document.querySelectorAll('[data-bbt]').forEach((e) => e.removeAttribute('data-bbt'));
+  const INTERACTIVO = "a[href], button, input, select, textarea, [role='button'], [role='radio'], " +
+    "[role='checkbox'], [role='tab'], [role='link'], [role='menuitem'], [contenteditable='true']";
+  // recorrido profundo: documento + shadow roots (en orden, para que las refs sean estables)
+  const todos = [];
+  const recorrer = (raiz) => {
+    if (!raiz) return;
+    raiz.querySelectorAll('*').forEach((el) => {
+      todos.push(el);
+      if (el.shadowRoot) recorrer(el.shadowRoot);
+    });
+  };
+  recorrer(document);
   const items = []; const seen = new Set();
-  const nodos = document.querySelectorAll(
-    "a[href], button, input, select, textarea, [role='button'], [role='radio'], [role='checkbox'], " +
-    "[role='tab'], [role='link'], [role='menuitem'], [contenteditable='true']");
-  nodos.forEach((el) => {
-    if (!visible(el)) return;
+  const esOpcion = (el) => el.tagName.toLowerCase() === 'input' &&
+    ['radio', 'checkbox'].includes((el.getAttribute('type') || '').toLowerCase());
+  todos.forEach((el) => {
+    if (!el.matches || !el.matches(INTERACTIVO)) return;
+    // los radios de Ultra están ocultos a propósito (se pinta la etiqueta): cuentan aunque midan 0
+    if (!visible(el) && !esOpcion(el)) return;
     const tag = el.tagName.toLowerCase();
     const type = (el.getAttribute('type') || '').toLowerCase();
     if (tag === 'input' && type === 'hidden') return;
     let texto = (el.innerText || el.value || '').trim().replace(/\s+/g, ' ');
     if (!texto && el.labels && el.labels.length) texto = (el.labels[0].innerText || '').trim().replace(/\s+/g, ' ');
+    if (!texto && el.closest && el.closest('label')) texto = (el.closest('label').innerText || '').trim().replace(/\s+/g, ' ');
+    if (!texto && el.parentElement) texto = (el.parentElement.innerText || '').trim().replace(/\s+/g, ' ');
     if (!texto) texto = (el.getAttribute('aria-label') || el.getAttribute('title') ||
                          el.getAttribute('placeholder') || el.getAttribute('name') || '').trim().replace(/\s+/g, ' ');
     const r = el.getBoundingClientRect();
@@ -66,8 +82,14 @@ _SNAP = r"""
     if (el.getAttribute('contenteditable') === 'true') o.editable = true;
     items.push(o);
   });
-  const cuerpo = document.body ? document.body.innerText : '';
-  return { items: items, texto: cuerpo.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim() };
+  // texto: el del body no incluye lo que está en shadow DOM, así que se añade aparte (en orden de aparición)
+  const trozos = [document.body ? document.body.innerText : ''];
+  todos.forEach((el) => {
+    if (!el.shadowRoot) return;
+    try { trozos.push(el.shadowRoot.innerText || ''); } catch (e) { }
+  });
+  const texto = trozos.join('\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  return { items: items, texto: texto };
 }
 """
 
@@ -164,8 +186,10 @@ class Navegador:
                 textos.append(data["texto"])
             elementos.extend(data.get("items") or [])
         texto = "\n\n".join(textos)
+        self._refs = {e["ref"]: e.get("texto", "") for e in elementos}   # para recuperar refs caducadas
         out = {"url": page.url, "titulo": (page.title() or "")[:160],
-               "texto": texto[:8000], "elementos": elementos}
+               "texto": texto[:8000], "elementos": elementos,
+               "pestanas": len(self._ctx.pages) if self._ctx else 1}
         if self._login_required(page.url):
             out["login_required"] = True
             out["critical"] = True
@@ -173,6 +197,22 @@ class Navegador:
                               "alumno y aun así cayó en el portal de acceso. Dile que ejecute `blackboard-mcp login` "
                               "(SSO de Outlook + MFA) y no intentes entrar con contraseña.")
         return out
+
+    def _resolver(self, ref: str):
+        """La ref puede haber caducado (Ultra re-renderiza y borra los atributos): se busca el mismo texto."""
+        frame, sel = self._localizar(ref)
+        try:
+            if frame.query_selector(sel) is not None:
+                return frame, sel
+        except Exception:
+            pass
+        texto = (getattr(self, "_refs", {}) or {}).get(ref, "")
+        nuevo = self._snapshot(self._page)
+        if texto:
+            for e in nuevo.get("elementos") or []:
+                if e.get("texto") == texto:
+                    return self._localizar(e["ref"])
+        raise ValueError(f"la ref {ref} ({texto[:40]!r}) ya no está en la página: usa bb_ver y las refs nuevas.")
 
     def abrir(self, url: str, visible: bool = True) -> dict:
         def go(pw):
@@ -208,26 +248,59 @@ class Navegador:
         except Exception:
             return ""
 
+    def _adoptar_ultima(self) -> None:
+        """Blackboard a veces abre el intento en otra pestaña: la que manda es la última."""
+        try:
+            paginas = [p for p in self._ctx.pages if not p.is_closed()]
+            if paginas and self._page is not None and self._page.is_closed():
+                self._page = paginas[-1]
+        except Exception:
+            pass
+
     def clic(self, ref: str) -> dict:
         def go(pw):
             page = self._slots(pw, self._visible)
-            frame, sel = self._localizar(ref)
+            frame, sel = self._resolver(ref)
             texto = self._texto_de(frame, sel)
             if ENVIAR.match(texto or ""):
                 return {"bloqueado": True, "boton": texto, "message": NO_ENVIA}
-            frame.click(sel, timeout=20000)
+            try:
+                frame.click(sel, timeout=8000)
+            except Exception:
+                # el radio/checkbox real está oculto: se pulsa su etiqueta (que es lo que ve el alumno)
+                frame.eval_on_selector(sel, """el => {
+                    const l = (el.labels && el.labels[0]) || el.closest('label') || el.parentElement || el;
+                    l.click();
+                }""")
             try:
                 page.wait_for_load_state("networkidle", timeout=8000)
             except Exception:
                 page.wait_for_timeout(800)
             self._guardar_cookies()
-            return self._snapshot(page)
+            # si el botón abre otra pestaña (el intento del cuestionario), hay que quedarse con ella: el popup
+            # puede tardar un par de segundos en aparecer
+            try:
+                page.wait_for_timeout(400)
+                for _ in range(20):
+                    hijos = [p for p in self._ctx.pages if not p.is_closed()]
+                    if len(hijos) > 1:
+                        self._page = hijos[-1]
+                        try:
+                            self._page.wait_for_load_state("domcontentloaded", timeout=15000)
+                            self._page.wait_for_load_state("networkidle", timeout=10000)
+                        except Exception:
+                            self._page.wait_for_timeout(1200)
+                        break
+                    page.wait_for_timeout(500)
+            except Exception:
+                pass
+            return self._snapshot(self._page)
         return self._do(go)
 
     def rellenar(self, ref: str, texto: str) -> dict:
         def go(pw):
             page = self._slots(pw, self._visible)
-            frame, sel = self._localizar(ref)
+            frame, sel = self._resolver(ref)
             frame.fill(sel, texto, timeout=20000)
             self._guardar_cookies()
             return self._snapshot(page)
@@ -236,7 +309,7 @@ class Navegador:
     def elegir(self, ref: str, opcion: str) -> dict:
         def go(pw):
             page = self._slots(pw, self._visible)
-            frame, sel = self._localizar(ref)
+            frame, sel = self._resolver(ref)
             try:
                 frame.select_option(sel, label=opcion, timeout=10000)
             except Exception:
@@ -247,8 +320,16 @@ class Navegador:
     def marcar(self, ref: str, marcado: bool = True) -> dict:
         def go(pw):
             page = self._slots(pw, self._visible)
-            frame, sel = self._localizar(ref)
-            frame.set_checked(sel, marcado, timeout=20000)
+            frame, sel = self._resolver(ref)
+            try:
+                frame.set_checked(sel, marcado, timeout=8000)
+            except Exception:
+                frame.eval_on_selector(sel, """(el, v) => {
+                    if (!!el.checked !== v) {
+                        const l = (el.labels && el.labels[0]) || el.closest('label') || el.parentElement || el;
+                        l.click();
+                    }
+                }""", marcado)
             return self._snapshot(page)
         return self._do(go)
 

@@ -131,6 +131,36 @@ Record any new lasting privilege like this here.
 - Sessions that expire mid-way come back as `login_required` + `critical` from the snapshot; the tool writes it to
   `session-health.json` so the rest of the server reports it too.
 
+### Barreras que ya costaron tiempo (no repetirlas)
+
+Resueltas en `navegador.py` — si tocas el archivo, mantén estas cuatro o el cuestionario vuelve a romperse:
+
+1. **Shadow DOM**: Ultra pinta la evaluación con web components y `document.querySelectorAll` no entra en los
+   `shadowRoot`. Las opciones (`Verdadero`/`Falso`) no aparecían ni en el texto ni como `ref`. El snapshot recorre los
+   shadow roots a mano y suma su `innerText`.
+2. **Radios ocultos**: el `input[type=radio]` real mide 0×0 (se pinta la etiqueta). No se pueden filtrar por
+   `visible()`; se incluyen siempre y el clic cae en su `<label>` (`el.labels[0]`/`closest('label')`).
+3. **Pestaña nueva**: "Iniciar intento" y "Continuar intento" abren el reproductor en **otra pestaña**. Si el
+   navegador se queda en la de atrás, el agente cree que el clic no hizo nada. `clic()` espera hasta 10 s a que
+   aparezca una pestaña nueva y se pasa a ella.
+4. **Refs caducadas**: Ultra re-renderiza y borra los `data-bbt`, así que una `ref` de hace dos llamadas puede no
+   existir. `_resolver()` reintenta: relee la página y busca el elemento por su texto; si tampoco, dice «usa bb_ver».
+
+Y estas son de operación:
+
+- **Los servidores MCP no recargan código**: el proceso los tiene importados. Después de tocar `navegador.py` hay que
+  reiniciar la app (o abrir sesión nueva). El cliente lanzó ~20 procesos `blackboard-mcp serve` (uno por sesión):
+  cada uno que use `bb_navegar` abre **su** ventana de Chrome. `bb_cerrar_navegador` cierra la suya. Idea pendiente:
+  un solo Chrome compartido por CDP (`connect_over_cdp` a un `--remote-debugging-port` fijo) para que todas las
+  sesiones usen la misma ventana.
+- **El intento no se pierde al cerrar**: Blackboard guarda el borrador y "Continuar intento" lo retoma; el intento
+  solo se consume al enviarlo o al agotarse el cronómetro (ahí se entrega solo). Cerrar el navegador a mitad es
+  seguro — es lo que permite reiniciar tras corregir el código.
+- **"Guardar y cerrar" y "Enviar" siguen deshabilitados hasta responder todo**, y el contador «N DE 10 PREGUNTAS
+  RESTANTES» se actualiza en el siguiente render, no al instante: no son fallos, no hay que insistir.
+- **PS 5.1 `Set-Content -Encoding utf8` escribe BOM** y `json.loads` revienta con BOM: al pasar JSON entre procesos
+  usar `[IO.File]::WriteAllText(..., UTF8Encoding($false))` o leer con `utf-8-sig`.
+
 ## Working on the code
 
 - Python venv in `.venv` (on ARM64, `pip install --only-binary=:all: cryptography` first). Tests:

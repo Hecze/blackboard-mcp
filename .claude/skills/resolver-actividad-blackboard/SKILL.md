@@ -49,6 +49,21 @@ intentes iniciar sesión ahí ni pidas la contraseña.
 - El cierre es del alumno: revisa, decide y pulsa Enviar.
 - Sí puedes pulsar "Guardar" / "Guardar borrador" (no envía) y "Siguiente".
 
+## Barreras conocidas (ya resueltas: no las redescubras)
+
+- **Las opciones no salen en el snapshot** → el texto de la pregunta y las `ref` viven en shadow DOM; el snapshot ya
+  lo recorre. Si ves una pregunta sin opciones, es que el snapshot es viejo: `bb_ver()`.
+- **`bb_clic` dice que la ref no existe** → la página se re-renderizó. No insistas con la misma ref: `bb_ver()` y usa
+  las nuevas (el propio tool intenta recuperarla por texto).
+- **El clic en "Iniciar/Continuar intento" parece no hacer nada** → abrió el reproductor en **otra pestaña**; el tool
+  ya se cambia solo. Si insistes dos veces, puedes abrir dos intentos: mira el número de "intentos restantes" antes.
+- **"Enviar" aparece deshabilitado** con todo respondido → normal hasta que el contador de pendientes llega a 0 en el
+  siguiente render. No es motivo para salir y volver a entrar.
+- **La sesión caduca** → `login_required` en la respuesta. No hay contraseña que probar: el alumno corre
+  `blackboard-mcp login`.
+- **Se cerró el navegador / se cayó la sesión de trabajo** → abre la actividad otra vez y pulsa "Continuar intento":
+  el borrador está guardado y no gasta intento (solo se gasta al enviar o al agotarse el tiempo).
+
 ## Al terminar
 
 1. `bb_captura()` y deja la ruta (o muéstrala) para que el alumno vea la última página.

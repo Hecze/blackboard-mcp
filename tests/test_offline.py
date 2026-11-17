@@ -328,6 +328,13 @@ def test_alarms_are_shown_one_at_a_time():
 
 
 
+def test_snapshot_pierces_shadow_dom_and_keeps_hidden_radios():
+    # Ultra pinta la evaluación con web components (shadow DOM) y los radios reales miden 0x0: si alguien
+    # "simplifica" el snapshot, las opciones desaparecen y el agente no puede responder.
+    from blackboard_mcp.navegador import _SNAP
+    assert "shadowRoot" in _SNAP and "esOpcion" in _SNAP and "closest('label')" in _SNAP
+
+
 def test_navegador_blocks_the_submit_button_and_spots_the_login_page():
     """Las actividades dentro de Blackboard se resuelven con `bb_*` sobre la sesión guardada; el envío es del alumno."""
     from blackboard_mcp.config import Settings
