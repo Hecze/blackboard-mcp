@@ -62,6 +62,22 @@ public class Win {
 }
 "@
 
+# ¿Está el alumno usando el teclado/ratón? (GetLastInputInfo): la automatización de UI solo arranca si está libre.
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class Ocio {
+  [StructLayout(LayoutKind.Sequential)] struct LASTINPUTINFO { public uint cbSize; public uint dwTime; }
+  [DllImport("user32.dll")] static extern bool GetLastInputInfo(ref LASTINPUTINFO p);
+  [DllImport("kernel32.dll")] static extern uint GetTickCount();
+  public static uint Segundos() {
+    var l = new LASTINPUTINFO(); l.cbSize = (uint)Marshal.SizeOf(l);
+    if (!GetLastInputInfo(ref l)) return 99;
+    return (GetTickCount() - l.dwTime) / 1000;
+  }
+}
+"@
+
 function App {
     $h = [Win]::Find("OpenCode")
     if ($h -eq [IntPtr]::Zero) {
@@ -160,6 +176,13 @@ try {
 
     $h = App
     if ($h -eq [IntPtr]::Zero) { throw "No encuentro la ventana de OpenCode" }
+
+    # Esta parte SÍ usa teclado y ratón de verdad (la app no tiene API para escribir en el compositor), así que
+    # espera a que el alumno suelte el teclado: si está escribiendo en otra ventana, el texto acabaría ahí.
+    $espera = [Diagnostics.Stopwatch]::StartNew()
+    while ($espera.Elapsed.TotalSeconds -lt 30 -and (Ocio::Segundos) -lt 2) { Start-Sleep -Milliseconds 300 }
+    Log "teclado libre tras $([int]$espera.Elapsed.TotalSeconds) s (ocio: $((Ocio::Segundos)) s)"
+
     [Win]::Force($h)
     Start-Sleep -Milliseconds 250
     $r = New-Object RECT

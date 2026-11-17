@@ -83,6 +83,20 @@ El agente avanza página por página y **se detiene antes de "Enviar"**: el env�
 completo está en `skills/resolver-actividad-blackboard/SKILL.md`. Si la actividad tiene "Iniciar intento", eso gasta un
 intento y arranca el cronómetro: se pide permiso antes.
 
+Todos los agentes comparten **una sola ventana de Chrome** (por CDP, puerto 9333): cada uno abre su pestaña y
+`bb_cerrar_navegador` cierra solo la suya. Así no aparecen ventanas nuevas cada vez que una sesión distinta navega.
+
+### ¿Puedo usar la laptop mientras un agente trabaja?
+
+Sí. Lo que hace el agente es controlar **su** ventana de Chrome por el protocolo de depuración: no mueve el ratón ni
+pulsa teclas del sistema, así que puedes escribir en otra ventana sin que se mezcle nada. Solo hay dos excepciones:
+
+- El botón **Hacer con OpenCode** de la alarma escribe en la app con teclado real (la app no ofrece otra forma). Ahora
+  espera hasta 30 s a que sueltes el teclado antes de empezar, y lo deja en el primer plano.
+- Al abrirse la ventana de Chrome puede robarte el foco una vez.
+
+El navegador guarda el borrador: cerrar la ventana a media actividad no la pierde ("Continuar intento").
+
 ## Registrar el servidor en tu cliente
 
 Es un servidor MCP **stdio**. El comando es `<repo>\.venv\Scripts\blackboard-mcp.exe` con el argumento `serve`.

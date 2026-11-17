@@ -12,8 +12,10 @@ varios hilos) y se reutiliza entre llamadas, de modo que la página se queda don
 """
 from __future__ import annotations
 
+import os
 import queue
 import re
+import subprocess
 import threading
 import time
 from datetime import datetime
@@ -22,6 +24,19 @@ from urllib.parse import urlparse
 
 from .auth import DESKTOP_UA, LoginRequired, save_cookies
 from .config import Settings
+
+# Todos los procesos MCP comparten UN Chrome por este puerto de depuración (solo 127.0.0.1).
+CDP_PORT = int(os.environ.get("BB_CDP_PORT") or 9333)
+_CHROME_SITIOS = (r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                  r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+                  str(Path(os.environ.get("LOCALAPPDATA", "")) / "Google/Chrome/Application/chrome.exe"))
+
+
+def _chrome_exe() -> str | None:
+    for p in _CHROME_SITIOS:
+        if p and Path(p).exists():
+            return p
+    return None
 
 # Botones que envían la actividad. El agente no los toca: los pulsa el alumno cuando ya revisó todo.
 ENVIAR = re.compile(r"^\s*(enviar|enviar intento|enviar actividad|entregar|entregar actividad|submit|submit attempt|"
@@ -106,6 +121,10 @@ class Navegador:
         self._ctx = None
         self._page = None
         self._visible = True
+        self._refs: dict = {}
+        self._puerto = CDP_PORT
+        self._compartido = False
+        self._sin_compartir = bool(os.environ.get("BB_CDP_OFF"))   # BB_CDP_OFF=1 → navegador propio (depurar)
 
     # --- hilo dueño de Playwright -------------------------------------------------------------------------------
     def _worker(self) -> None:
@@ -140,23 +159,95 @@ class Navegador:
     def _slots(self, pw, visible: bool):
         if self._page is not None and not self._page.is_closed():
             return self._page
-        kwargs = {"viewport": {"width": 1280, "height": 900}}
-        if not visible:
-            kwargs["user_agent"] = DESKTOP_UA
         state = str(self.s.cookies_path) if self.s.cookies_path.exists() else None
-        opciones = {"headless": not visible}
         self._browser = None
-        if self.s.browser_channel:                 # el mismo Chrome que usa el inicio de sesión (config.json)
+        self._ctx = None
+        if not self._sin_compartir:
             try:
-                self._browser = pw.chromium.launch(channel=self.s.browser_channel, **opciones)
+                self._browser, self._compartido = self._conectar(pw, visible)
+                self._ctx = self._browser.contexts[0] if self._browser.contexts else self._browser.new_context()
             except Exception:
                 self._browser = None
-        if self._browser is None:
-            self._browser = pw.chromium.launch(**opciones)
-        self._ctx = self._browser.new_context(storage_state=state, **kwargs)
+        if self._browser is None:                  # sin CDP: un navegador propio (lo de antes)
+            opciones = {"headless": not visible}
+            if not visible:
+                opciones["viewport"] = {"width": 1280, "height": 900}
+            if self.s.browser_channel:             # el mismo Chrome que usa el inicio de sesión (config.json)
+                try:
+                    self._browser = pw.chromium.launch(channel=self.s.browser_channel, **opciones)
+                except Exception:
+                    self._browser = None
+            if self._browser is None:
+                self._browser = pw.chromium.launch(**opciones)
+            kwargs = {"viewport": {"width": 1280, "height": 900}}
+            if not visible:
+                kwargs["user_agent"] = DESKTOP_UA
+            self._ctx = self._browser.new_context(storage_state=state, **kwargs)
+            self._compartido = False
+        elif state:
+            self._inyectar_cookies(state)          # el perfil compartido puede ser nuevo: se le pasan las cookies
         self._page = self._ctx.new_page()
         self._visible = visible
         return self._page
+
+    def _inyectar_cookies(self, state: str) -> None:
+        try:
+            import json
+            cookies = json.loads(Path(state).read_text(encoding="utf-8")).get("cookies") or []
+            if cookies:
+                self._ctx.add_cookies(cookies)
+        except Exception:
+            pass                                       # sesión caducada o formato raro: ya se verá en login_required
+
+    def _probar_cdp(self, pw):
+        try:
+            return pw.chromium.connect_over_cdp(f"http://127.0.0.1:{self._puerto}")
+        except Exception:
+            return None
+
+    def _conectar(self, pw, visible: bool):
+        """Un solo Chrome para todos: el primero lo lanza con depuración y los demás se cuelgan de él.
+
+        Cada proceso MCP (la app lanza uno por sesión) abría su propia ventana; con CDP todos comparten la misma,
+        que es también la que ve el alumno. Si el puerto no responde, se lanza Chrome con el perfil propio
+        (`~/.blackboard-mcp/chrome-cdp`, sin chocar con el perfil del inicio de sesión)."""
+        navegador = self._probar_cdp(pw)
+        if navegador is not None:
+            return navegador, True
+        self._lanzar_chrome(visible)
+        for _ in range(60):
+            navegador = self._probar_cdp(pw)
+            if navegador is not None:
+                return navegador, True
+            time.sleep(0.5)
+        raise RuntimeError("no pude conectar al Chrome compartido")
+
+    def _lanzar_chrome(self, visible: bool) -> None:
+        exe = _chrome_exe()
+        if not exe:
+            raise RuntimeError("no encuentro chrome.exe; usa BB_CDP sin compartir")
+        perfil = self.s.home / "chrome-cdp"
+        perfil.mkdir(parents=True, exist_ok=True)
+        candado = self.s.home / "chrome-cdp.lock"
+        f = open(candado, "a+b")
+        try:
+            try:
+                import msvcrt
+                f.seek(0)
+                msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+            except Exception:
+                return                                  # otro proceso lo está lanzando: que espere y conecte
+            args = [exe, f"--remote-debugging-port={self._puerto}", f"--user-data-dir={perfil}",
+                    "--remote-allow-origins=*", "--no-first-run", "--no-default-browser-check",
+                    "--no-startup-window" if not visible else "--new-window", "about:blank"]
+            if not visible:
+                args.insert(1, "--headless=new")
+            subprocess.Popen(args, close_fds=True)
+        finally:
+            try:
+                f.close()
+            except Exception:
+                pass
 
     def _guardar_cookies(self) -> None:
         try:
@@ -366,11 +457,21 @@ class Navegador:
         def go(pw):
             self._guardar_cookies()
             try:
-                if self._ctx is not None:
-                    self._ctx.close()
-                if self._browser is not None:
-                    self._browser.close()
+                if self._compartido:
+                    # Chrome es de todos: solo se cierra la pestaña de este agente
+                    if self._page is not None and not self._page.is_closed():
+                        self._page.close()
+                    try:
+                        self._browser.close()      # suelta la conexión CDP, no mata el navegador
+                    except Exception:
+                        pass
+                else:
+                    if self._ctx is not None:
+                        self._ctx.close()
+                    if self._browser is not None:
+                        self._browser.close()
             finally:
                 self._browser = self._ctx = self._page = None
+                self._compartido = False
             return {"ok": True, "cerrado": True}
         return self._do(go)

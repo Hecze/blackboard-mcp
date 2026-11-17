@@ -149,10 +149,13 @@ Resueltas en `navegador.py` — si tocas el archivo, mantén estas cuatro o el c
 Y estas son de operación:
 
 - **Los servidores MCP no recargan código**: el proceso los tiene importados. Después de tocar `navegador.py` hay que
-  reiniciar la app (o abrir sesión nueva). El cliente lanzó ~20 procesos `blackboard-mcp serve` (uno por sesión):
-  cada uno que use `bb_navegar` abre **su** ventana de Chrome. `bb_cerrar_navegador` cierra la suya. Idea pendiente:
-  un solo Chrome compartido por CDP (`connect_over_cdp` a un `--remote-debugging-port` fijo) para que todas las
-  sesiones usen la misma ventana.
+  reiniciar la app (o abrir sesión nueva). El cliente lanza **un proceso `blackboard-mcp serve` por sesión**, así que
+  sin esto cada uno abría su propia ventana de Chrome. Ahora hay **un solo Chrome compartido por CDP**: el primero que
+  llega lo lanza con `--remote-debugging-port=9333` (perfil propio en `~/.blackboard-mcp/chrome-cdp`, sólo 127.0.0.1) y
+  los demás se cuelgan con `connect_over_cdp`; las cookies de `cookies.json` se inyectan al conectar.
+  `bb_cerrar_navegador` cierra **tu pestaña**, no el navegador de los demás. `BB_CDP_PORT` cambia el puerto y
+  `BB_CDP_OFF=1` vuelve al navegador propio (para depurar). Ojo: el perfil `chrome-cdp` es aparte del de `bb_login`;
+  si Chrome no está en las rutas habituales, se cae al navegador propio.
 - **El intento no se pierde al cerrar**: Blackboard guarda el borrador y "Continuar intento" lo retoma; el intento
   solo se consume al enviarlo o al agotarse el cronómetro (ahí se entrega solo). Cerrar el navegador a mitad es
   seguro — es lo que permite reiniciar tras corregir el código.
