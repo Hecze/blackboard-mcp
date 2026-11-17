@@ -154,6 +154,59 @@ Todas las formas de trabajar con yEd:
 `pypdfium2`. No instales `pymupdf` sin versión: en ARM64 pip elige la 2.x, que no tiene binario `win_arm64`, e
 intenta compilarla y falla.
 
+### 5.4 IBM Rhapsody (curso Análisis y Diseño de Software — herramienta EXIGIDA)
+
+El curso pide **IBM Rhapsody** para el MCUN/MAN. La consigna del examen dice "Rhapsody, o DrawIO", pero el logro y
+la profesora insisten en Rhapsody: **no lo sustituyas por draw.io** salvo que el estudiante lo pida.
+
+Instalación completa: `scripts\env\install-rhapsody.ps1` (lo ejecuta el estudiante, como administrador).
+
+- **Media del profesor** (Cibertec 4357): MediaFire, `IBM_Rational_Rhapsody_8.4_64Bits.rar` (1.78 GB). Es el
+  **media oficial de evaluación de IBM** (`ratlRhapsody_eval_8.4_Windows_64/setup.exe` + MSI + cabs) más
+  `Rhapsody_Eval_Key.dat` y capturas. **No es un crack**: la "activación" es un archivo de licencia de evaluación.
+- **Descargar de MediaFire sin navegador**: la página responde 403 a `Invoke-WebRequest`, pero el enlace directo
+  está en el `href` del `#downloadButton` de la página (token, caduca). Con ese enlace, `curl -L` baja a ~10 MB/s.
+  Con navegador: abrir la página, leer `document.querySelector('#downloadButton').href`.
+- **Extraer**: `tar -xf archivo.rar` (bsdtar de Windows lee RAR). No hace falta 7-Zip ni WinRAR.
+- **Instalar**: el `setup.exe` arrastra prerrequisitos (dotnetfx35, vcredist) que en ARM64 pueden colgarse; el MSI
+  a secas funciona:
+  `msiexec /i "IBM Rational Rhapsody 8.4 64bit.msi" /qn /l*v log.txt ALLUSERS=1` → exit 0 en ~3 min,
+  queda en `C:\Program Files\IBM\Rational\Rhapsody\8.4\` (`rhapsody.exe` y `RhapsodyCL.exe`).
+- **Licencia**: copiar `Rhapsody_Eval_Key.dat` a `C:\ProgramData\IBM\Rational\Rhapsody\8.4\` y definir la variable
+  de sistema **`TELELOGIC_LICENSE_FILE`** con esa ruta. La clave de evaluación **expira el 28-jul-2021**, así que
+  hay que abrir Rhapsody con la fecha retrocedida.
+- **Fecha retrocedida sin tocar el reloj de Windows**: **RunAsDate** (NirSoft, `runasdate-x64.zip`, portable):
+  `RunAsDate.exe /movetime 01\07\2021 12:00:00 "C:\Program Files\IBM\Rational\Rhapsody\8.4\rhapsody.exe"`.
+  Es por proceso: no afecta a TLS, Office ni al resto del sistema. No cambies la fecha del sistema.
+- **Perfiles**: el profesor entrega `PERFILES.zip` con `BusinessModelingProfile`, `AnalysisProfile` y
+  `DesignProfile` (`.sbsx`). Se cargan **por proyecto** (no una vez por instalación) y son los que aportan los
+  estereotipos `«BusinessActor»`, `«BusinessUseCase»`, `«BusinessGoal»`, `«BusinessEntity»`, `«BusinessWorker»`.
+
+**Verificado en este PC (16/11/2026, Windows 11 Home ARM64 26200, sin admin permanente):** el MSI instala
+(exit 0) y **Rhapsody arranca y funciona emulado**, con la clave de evaluación y `RunAsDate` al 01/07/2021 (la barra
+de estado muestra la fecha retrocedida). El "activador" del profesor **no es un crack**: es un archivo de licencia
+FlexLM (`Rhapsody_Eval_Key.dat`) que expira el **28-jul-2021**; de ahí `RunAsDate`.
+
+Automatizar su interfaz (lo que cuesta):
+
+- Es **MFC + una página IE de bienvenida** ("Welcome to Rhapsody") que se queda con el foco. Los clics sintéticos
+  en la pestaña del diagrama **no entran** y la paleta de herramientas sale vacía ("No applicable controls").
+  Solución que sí funciona: renombrar `WelcomeWizard` (a `WelcomeWizard_off`) y destruir el hijo MDI de bienvenida
+  enviando `WM_MDIDESTROY` (0x0221) al `MDIClient` de la ventana principal; el diagrama queda activo y aparece la
+  paleta **Diagram Tools**.
+- Con la paleta activa, crear elementos es fiable: clic en la herramienta (Object/Class/Actor/…) → clic en el
+  lienzo → escribir el nombre → Enter. Así se creó el actor de prueba.
+- **La paleta de un Object Model Diagram no tiene "Use Case"**: los CUN exigen un **Use Case Diagram**, que se crea
+  desde el menú contextual del **paquete** (`Add New > Use Case Diagram`). Ese menú es el punto frágil: los clics
+  caen en la fila equivocada del árbol y el submenú se cierra. Preferible pedírselo al estudiante.
+- Rhapsody (sin elevación) **no escribe en `C:\`**: los proyectos van en `C:\Users\<usuario>\...` (aquí se usó
+  `C:\RHAPSODY`, que sí funcionó porque el instalador lo dejó escribible; `C:\Project` falló con "Acceso denegado").
+- Atajos útiles: `Ctrl+N` abre *New Project*; abrir un proyecto por línea de comandos
+  (`rhapsody.exe "C:\...\Modelo.rpyx"`) evita el asistente. Los diálogos se cierran de forma fiable con
+  `SendMessage(BM_CLICK 0x00F5)` al botón (por texto), no con clics sintéticos.
+- Conclusión práctica: **Rhapsody sirve para que el estudiante dibuje (10–15 min)**, no para que un agente lo
+  maneje a ciegas. Entrégale la lista cerrada de ON/CUN/AN y las navegabilidades, que dibuje y exporte.
+
 ## 6. Capturas
 
 - Con Windows-MCP: `Screenshot` o `Snapshot` de la ventana (sin `CopyFromScreen` con offsets ni `PrintWindow`).
