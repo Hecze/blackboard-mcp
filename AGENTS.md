@@ -55,6 +55,19 @@ Follow **[`skills/preparar-entorno-escritorio/SKILL.md`](skills/preparar-entorno
 coordinate clicks or a persistent admin broker; anything that needs UAC is run by the student. Windows x86_64 and
 ARM64 (verified ARM64 notes at the end of the skill; on ARM64 yEd runs via the "yEd (ARM64)" shortcut / native JDK).
 
+### Before delivering anything (Word/PDF, SQL, diagrams)
+
+Follow **[`skills/entregables-sin-huella/SKILL.md`](skills/entregables-sin-huella/SKILL.md)**: the deliverable must
+read as the student's own work and be defensible in the viva.
+- Prose: first person, no defining the concept being evaluated, no citing the assignment instructions or the rubric,
+  no "en conclusión / a continuación", no closing that repeats the tables.
+- SQL: no decorative header, no per-column comments, no `IF OBJECT_ID … DROP` in every table, no `dbo.` everywhere,
+  no systematic `CONSTRAINT` prefixes. Keep only what the statement asks for (PK, FK, NULL/NOT NULL, types, `GO`).
+- Metadata: `python scripts\limpiar_metadatos.py archivo.docx --autor "<alumno>" --titulo "<T1 …>"` (and the same for
+  the PDF). Never ship `python-docx`, the teacher's name as `lastModifiedBy`, or a borrowed document title.
+- Never fake authorship, signatures or screenshots; if the course forbids AI, say so first.
+
+
 ### SQL Server without elevation (privilege left on this machine)
 
 To let agents use `sqlcmd`/`pyodbc` as the student's Windows user, a SQL login was created for that user:
