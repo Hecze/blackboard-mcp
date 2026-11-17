@@ -255,7 +255,7 @@ def test_alarms_only_big_open_evaluations():
     assert course_title("GDAT5373 BASE DE DATOS [CIBERTEC.GDAT5373.2026]") == "Base de Datos"
     x = toast_xml("Examen T1", "Base de Datos", timedelta(hours=15, minutes=20), timedelta(hours=2))
     assert 'scenario="alarm"' in x and "Looping.Alarm" in x and x.count("<action ") == 1 and "Posponer 2 h" in x
-    assert "Quedan 15 h 20 min" in x and "Vence" not in x
+    assert "<text>Examen T1 · Base de Datos</text><text>Quedan 15 h 20 min</text>" in x and "Vence" not in x
 
 
 def test_course_labels_unique_for_repeated_courses():

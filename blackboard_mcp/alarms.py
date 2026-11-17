@@ -107,7 +107,8 @@ def toast_xml(title: str, course: str, left: timedelta, snooze: timedelta) -> st
     return (
         '<toast scenario="alarm" duration="long">'
         '<visual><binding template="ToastGeneric">'
-        f'<text>{escape(title)}</text><text>{escape(course)}</text><text>Quedan {escape(human_left(left))}</text>'
+        # Windows bolds only the first line: exam + course there (both tell you where to look), time left below.
+        f'<text>{escape(title)} · {escape(course)}</text><text>Quedan {escape(human_left(left))}</text>'
         '</binding></visual>'
         '<audio src="ms-winsoundevent:Notification.Looping.Alarm" loop="true"/>'
         f'<actions><action activationType="system" arguments="dismiss" content="Posponer {escape(human_span(snooze))}"/></actions>'
