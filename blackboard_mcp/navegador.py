@@ -311,7 +311,11 @@ class Navegador:
             # la sesión del navegador puede haberse quedado vieja: se refrescan las cookies antes de navegar
             if self.s.cookies_path.exists():
                 self._inyectar_cookies(str(self.s.cookies_path))
-            page.goto(url, wait_until="domcontentloaded", timeout=60000)
+            page.goto(url, wait_until="commit", timeout=60000)
+            try:
+                page.wait_for_load_state("domcontentloaded", timeout=20000)
+            except Exception:
+                pass
             try:
                 page.wait_for_load_state("networkidle", timeout=15000)
             except Exception:
