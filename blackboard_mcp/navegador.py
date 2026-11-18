@@ -308,6 +308,9 @@ class Navegador:
     def abrir(self, url: str, visible: bool = True) -> dict:
         def go(pw):
             page = self._slots(pw, visible)
+            # la sesión del navegador puede haberse quedado vieja: se refrescan las cookies antes de navegar
+            if self.s.cookies_path.exists():
+                self._inyectar_cookies(str(self.s.cookies_path))
             page.goto(url, wait_until="domcontentloaded", timeout=60000)
             try:
                 page.wait_for_load_state("networkidle", timeout=15000)
@@ -315,10 +318,20 @@ class Navegador:
                 pass
             # Ultra pinta la pregunta en diferido: sin esto el snapshot llega vacío y parece que no hay nada
             try:
+                page.wait_for_function("() => document.body && document.body.innerText.trim().length > 40",
+                                       timeout=12000)
+            except Exception:
+                pass
+            try:
                 page.wait_for_selector("input[type=radio], input[type=checkbox], textarea, select, input[type=text]",
                                        timeout=6000)
             except Exception:
                 pass
+            if self._login_required(page.url) and self.s.cookies_path.exists():
+                # segunda oportunidad con cookies recién leídas (la tarea de keep-alive las renueva)
+                self._inyectar_cookies(str(self.s.cookies_path))
+                page.goto(url, wait_until="domcontentloaded", timeout=60000)
+                page.wait_for_timeout(2500)
             self._guardar_cookies()
             return self._snapshot(page)
         return self._do(go)
