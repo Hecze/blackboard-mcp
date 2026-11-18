@@ -158,6 +158,7 @@ try {
             "Usa el MCP blackboard (bb_navegar/bb_ver/bb_clic/bb_rellenar/bb_marcar): ya trae mi sesión de Outlook; el navegador de la app no la tiene."
             "Lee .claude\skills\resolver-actividad-blackboard\SKILL.md y sigue esa regla: avanza página por página y para antes de Enviar (yo reviso y envío)."
             "Si hay que pulsar «Iniciar intento» (gasta un intento y arranca el cronómetro), avísame y espera mi OK."
+            "Si la actividad es grupal (avance de proyecto, entregable, en equipo), NO la abras: avísame y para."
         ) -join " "
     } else {
         # T1/T2/EF: el enunciado es un .docx y se resuelve en el repo
@@ -222,3 +223,4 @@ catch {
     } catch { }
     exit 1
 }
+

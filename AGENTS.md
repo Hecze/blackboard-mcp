@@ -170,6 +170,9 @@ Y estas son de operación:
   queda sin pestaña (el borrador sigue en Blackboard). Para volver: "Continuar intento".
 - **Enviar**: `bb_clic` se niega con «Enviar» siempre; `bb_enviar` existe para cuando el alumno lo autoriza
   explícitamente en la conversación. El envío deja el intento calificado en segundos.
+- **Trabajos en equipo: no se tocan.** Ni abrir. Si el título o las instrucciones huelen a grupo («grupal», «en
+  equipo», «avance de proyecto», «entregable», «integrantes»), se avisa al alumno y se para: no es un cuestionario
+  individual, y resolverlo por él rompe la evaluación del grupo.
 - **PS 5.1 `Set-Content -Encoding utf8` escribe BOM** y `json.loads` revienta con BOM: al pasar JSON entre procesos
   usar `[IO.File]::WriteAllText(..., UTF8Encoding($false))` o leer con `utf-8-sig`.
 

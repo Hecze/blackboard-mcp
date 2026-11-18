@@ -44,6 +44,10 @@ intentes iniciar sesión ahí ni pidas la contraseña.
 
 ## Regla dura: nunca envíes (salvo permiso explícito)
 
+- **Nada de trabajos en equipo.** Si la actividad es **grupal** (título o instrucciones con «grupal», «en equipo»,
+  «avance de proyecto», «entregable», o un integrante del grupo), **no la abras, no la respondas y no la envíes**:
+  avisa al alumno y para. Esa la resuelve el grupo, no un agente.
+
 - **Nunca** pulses "Enviar", "Enviar intento", "Entregar", "Guardar y enviar" ni "Finalizar intento" con `bb_clic`:
   se niega (devuelve `bloqueado: true`); si lo ves, es correcto: no busques la forma de saltarlo.
 - El cierre es del alumno: revisa, decide y pulsa Enviar. **Salvo que lo autorice explícitamente en la conversación**
