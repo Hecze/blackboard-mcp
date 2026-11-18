@@ -1,5 +1,20 @@
 # AGENTS.md
 
+## REGLA FUNDAMENTAL: toda respuesta sale del material del curso
+
+**Ninguna evaluación se contesta con conocimiento general.** Antes de responder una sola pregunta hay que traer el
+material del curso desde Blackboard y responder **con ese material delante**:
+
+1. **Sílabo y guía** del curso (qué entra y qué no).
+2. **Contenido del tema**: documentos Ultra (`body` de `/learn/api/public/v1/courses/{c}/contents/{id}`), PDFs/PPTs
+   de `bbcswebdav`, presentaciones (Storyline/SCORM: `story.html` + `story_content/slide*.xml`), infografías y la
+   clase grabada/transcripción (`bb_recordings` / `bb_transcript`).
+3. Solo si el material no cubre la pregunta, se busca la fuente que el propio curso cita; **nunca se improvisa**.
+4. Si aun así no hay base, se dice («esto no está en el material») en vez de arriesgar la nota.
+
+Consecuencia práctica: un cuestionario de 5 preguntas se responde con el tema abierto al lado; si no se ha leído el
+tema, **no se abre el intento**. Muchos admiten un solo intento: abrir sin material es quemar la nota.
+
 Fork of [blackboard-mcp](https://github.com/Mattlo0546/blackboard-mcp) used by a Cibertec student
 (Ingeniería de Ciencia de Datos e IA) to give the AI full read access to their Blackboard:
 `https://cibertec.blackboard.com` (Ultra). Talk to the student in Spanish.

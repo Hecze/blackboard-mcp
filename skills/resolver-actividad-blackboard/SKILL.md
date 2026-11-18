@@ -44,6 +44,9 @@ intentes iniciar sesión ahí ni pidas la contraseña.
 
 ## Regla dura: nunca envíes (salvo permiso explícito)
 
+- **Primero el material, después la pregunta.** Ninguna respuesta se inventa: se abre el tema en Blackboard
+  (documentos Ultra, PDF/PPT de `bbcswebdav`, presentación Storyline/SCORM, transcripción de la clase) y se responde con
+  eso delante. Si el material no lo dice, se avisa en vez de arriesgar. Un intento quemado no se recupera.
 - **Nada de trabajos en equipo.** Si la actividad es **grupal** (título o instrucciones con «grupal», «en equipo»,
   «avance de proyecto», «entregable», o un integrante del grupo), **no la abras, no la respondas y no la envíes**:
   avisa al alumno y para. Esa la resuelve el grupo, no un agente.
