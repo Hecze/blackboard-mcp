@@ -5,6 +5,11 @@
 **Ninguna evaluación se contesta con conocimiento general.** Antes de responder una sola pregunta hay que traer el
 material del curso desde Blackboard y responder **con ese material delante**:
 
+**Permiso permanente:** cuando el alumno pide resolver una evaluación, autoriza implícitamente a **leer y descargar
+cualquier cosa de Blackboard** (documentos, PDF/PPT, Storyline, infografías, grabaciones y transcripciones, el propio
+cuestionario). No hace falta pedir permiso para abrir material ni para leer diapositivas o imágenes: es parte del
+trabajo. Solo se pide permiso para cosas fuera de Blackboard o que toquen la máquina del alumno.
+
 1. **Sílabo y guía** del curso (qué entra y qué no).
 2. **Contenido del tema**: documentos Ultra (`body` de `/learn/api/public/v1/courses/{c}/contents/{id}`), PDFs/PPTs
    de `bbcswebdav`, presentaciones (Storyline/SCORM: `story.html` + `story_content/slide*.xml`), infografías y la
