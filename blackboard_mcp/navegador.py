@@ -41,6 +41,8 @@ def _chrome_exe() -> str | None:
 # Botones que envían la actividad. El agente no los toca: los pulsa el alumno cuando ya revisó todo.
 ENVIAR = re.compile(r"^\s*(enviar|enviar intento|enviar actividad|entregar|entregar actividad|submit|submit attempt|"
                     r"guardar y enviar|guardar y entregar|finalizar|finalizar intento|terminar intento)\s*$", re.I)
+# "3 DE 5 PREGUNTAS RESTANTES": nunca se envía con preguntas en blanco (cada una vale puntos).
+PENDIENTES = re.compile(r"(\d+)\s+DE\s+\d+\s+PREGUNTAS\s+RESTANTES", re.I)
 NO_ENVIA = ("Bloqueado: ese botón ENVÍA la actividad y eso lo pulsas tú. Deja el formulario completo y avísale: "
             "«revisa y pulsa Enviar».")
 
@@ -471,13 +473,17 @@ class Navegador:
         """Pulsa el botón de ENVIAR. Solo con autorización explícita del alumno en la conversación.
 
         `bb_clic` se niega siempre con los botones de envío; esto es la puerta aparte para cuando el alumno dice
-        «envíalos» y no hace falta que revise uno por uno."""
+        «envíalos» y no hace falta que revise uno por uno. Se niega a enviar si quedan preguntas sin responder."""
         def go(pw):
             page = self._slots(pw, self._visible)
             frame, sel = self._resolver(ref)
             texto = self._texto_de(frame, sel)
             if not ENVIAR.match(texto or ""):
                 return {"error": f"«{texto}» no es un botón de envío: usa bb_clic"}
+            pendientes = PENDIENTES.search(page.inner_text("body") if page else "")
+            if pendientes and int(pendientes.group(1)) > 0:
+                return {"bloqueado": True, "pendientes": int(pendientes.group(1)),
+                        "message": f"Quedan {pendientes.group(1)} preguntas sin responder: contéstalas antes de enviar."}
             antes = len([p for p in self._ctx.pages if not p.is_closed()])
             frame.click(sel, timeout=15000)
             page.wait_for_timeout(2500)
