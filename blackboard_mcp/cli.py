@@ -22,7 +22,12 @@ def _alarms(demo: bool) -> int:
     s = load_settings()
     try:
         rang = alarms.run(s, Blackboard(s))
-    except LoginRequired as e:
+    except Exception as e:  # noqa: BLE001
+        import httpx
+        if isinstance(e, httpx.TransportError):   # no network to Blackboard: try again next run; keep-alive warns
+            return 3
+        if not isinstance(e, LoginRequired):
+            raise
         alarms.session_lost()
         return 2
     print(json.dumps([{"title": a["title"], "course": a["course"], "due": a["due"].isoformat()} for a in rang],
@@ -54,9 +59,23 @@ def main() -> None:
     import anyio
     from . import server
     if args.cmd == "refresh":
-        from .auth import browser_login
+        # Exit codes for the keep-alive task: 0 renewed, 2 sign-in needed, 3 Blackboard unreachable (network;
+        # the session itself may be fine, so session-health.json is left untouched), 1 any other error.
+        from .auth import blackboard_reachable, browser_login
         from .config import load_settings
-        rep = browser_login(load_settings(), headless=True)
+        s = load_settings()
+        net = {"ok": False, "network": True, "reason": f"{s.base_url} no responde (problema de red o Blackboard caído)"}
+        if not blackboard_reachable(s):
+            print(json.dumps(net, indent=1, ensure_ascii=False))
+            sys.exit(3)
+        try:
+            rep = browser_login(s, headless=True)
+        except Exception as e:  # noqa: BLE001 - a page timeout mid-way is usually the network again
+            if not blackboard_reachable(s):
+                print(json.dumps(net, indent=1, ensure_ascii=False))
+                sys.exit(3)
+            print(json.dumps({"ok": False, "error": f"{type(e).__name__}: {str(e)[:300]}"}, indent=1, ensure_ascii=False))
+            sys.exit(1)
         if not rep.get("ok"):
             rep["login_required"] = True
     elif args.cmd == "login":

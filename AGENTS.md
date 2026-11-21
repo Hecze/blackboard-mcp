@@ -34,7 +34,10 @@ Treat the session as lost when ANY of these happens:
 - A `bb_*` tool returns `login_required: true` (or `critical: true`).
 - `~/.blackboard-mcp/session-health.json` has `"ok": false`.
 - The MCP server's instructions start with `CRITICAL:`.
-- The last line of `~/.blackboard-mcp/keepalive.log` has `exit=` other than `0`.
+- The last line of `~/.blackboard-mcp/keepalive.log` has `exit=2` (sign-in needed) or `exit=1` (refresh broke).
+  `exit=3` is **not** a lost session: Blackboard was unreachable from the student's network (e.g. their Wi-Fi not
+  reaching AWS while the rest of the internet works). Say so plainly, suggest mobile data / restarting the router,
+  and run `.venv\Scripts\blackboard-mcp.exe refresh` once the network is back.
 
 When it happens:
 

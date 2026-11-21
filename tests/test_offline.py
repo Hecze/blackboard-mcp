@@ -366,3 +366,16 @@ def test_course_labels_unique_for_repeated_courses():
     lab = course_labels([a, b, c])
     assert lab["_3"] == "MATE5491 MATEMATICA II" and lab["_1"] != lab["_2"] and "202610202612" in lab["_1"]
 
+
+
+def test_blackboard_reachable_tells_network_from_session(monkeypatch):
+    import httpx
+    from blackboard_mcp import auth
+    s = load_settings()
+
+    def down(*a, **k):
+        raise httpx.ConnectTimeout("timed out")
+    monkeypatch.setattr(httpx, "get", down)
+    assert auth.blackboard_reachable(s, timeout=1) is False
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: httpx.Response(302))   # any HTTP answer = reachable
+    assert auth.blackboard_reachable(s, timeout=1) is True

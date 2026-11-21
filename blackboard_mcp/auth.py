@@ -93,6 +93,17 @@ def _launch(pw, settings: Settings, headless: bool):
     return pw.chromium.launch_persistent_context(**kwargs)
 
 
+def blackboard_reachable(settings: Settings, timeout: float = 15) -> bool:
+    """Can this machine reach the Blackboard server at all? Any HTTP answer counts; a connect error or timeout
+    means a network problem (Wi-Fi not reaching AWS, Blackboard down), which is not a lost session."""
+    import httpx
+    try:
+        httpx.get(settings.base_url + "/", timeout=timeout, follow_redirects=False)
+        return True
+    except httpx.TransportError:
+        return False
+
+
 def browser_login(settings: Settings, *, headless: bool = False, timeout_s: int = 300) -> dict:
     res = _browser_login(settings, headless=headless, timeout_s=timeout_s)
     write_health(settings, bool(res.get("ok")),
